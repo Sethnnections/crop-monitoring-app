@@ -1,0 +1,25 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Nyika Plateau (Very Reduced)",
+          "country": "Malawi"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [33.90, -10.45],
+              [33.93, -10.47],
+              [33.96, -10.45],
+              [33.93, -10.43],
+              [33.90, -10.45]
+            ]
+          ]
+        }
+      }
+    ]
+  }
+  
