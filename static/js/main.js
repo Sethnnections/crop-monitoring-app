@@ -258,27 +258,21 @@ document.addEventListener('DOMContentLoaded', function() {
     function createNdviLegend() {
         const legend = document.getElementById('ndvi-legend');
         
-        // Enhanced color gradient with more stops for better visualization
         const gradientStops = [
-            { color: '#050505', value: -1.0, label: 'Water/No Data' },
-            { color: '#bfbfbf', value: -0.5, label: 'Bare Soil' },
-            { color: '#dbdbdb', value: -0.2 },
-            { color: '#ebebeb', value: -0.1 },
-            { color: '#fffacc', value: 0.0, label: 'No Vegetation' },
-            { color: '#ede8b5', value: 0.05 },
-            { color: '#ddd98e', value: 0.1 },
-            { color: '#ccc966', value: 0.15 },
-            { color: '#bcba42', value: 0.2, label: 'Sparse Vegetation' },
-            { color: '#b0c261', value: 0.25 },
-            { color: '#a3cc35', value: 0.3 },
-            { color: '#91bf32', value: 0.35 },
-            { color: '#80b328', value: 0.4 },
-            { color: '#70a61f', value: 0.45 },
-            { color: '#609918', value: 0.5 },
-            { color: '#4d8c14', value: 0.6 },
-            { color: '#3c7e11', value: 0.7 },
-            { color: '#2a6e0c', value: 0.8 },
-            { color: '#1a6008', value: 0.9, label: 'Dense Vegetation' }
+            { color: '#050505', value: -1.0, label: 'Water/Built-up (NDVI < -0.5)' },
+            { color: '#bfbfbf', value: -0.5, label: 'Bare Soil/Urban (-0.5 ≤ NDVI < -0.2)' },
+            { color: '#dbdbdb', value: -0.2, label: 'Dry Soil/Rock (-0.2 ≤ NDVI < -0.1)' },
+            { color: '#ebebeb', value: -0.1, label: 'Sand/Snow (-0.1 ≤ NDVI < 0)' },
+            { color: '#ffffff', value: 0.0, label: 'No Vegetation (0 ≤ NDVI < 0.05)' },
+            { color: '#ff3333', value: 0.05, label: 'Stress/Burned (0.05 ≤ NDVI < 0.1)' },
+            { color: '#ff9900', value: 0.1, label: 'Sparse Grass/Shrubs (0.1 ≤ NDVI < 0.15)' },
+            { color: '#ffe600', value: 0.15, label: 'Moderate Grassland (0.15 ≤ NDVI < 0.2)' },
+            { color: '#ffff33', value: 0.2, label: 'Healthy Pasture (0.2 ≤ NDVI < 0.3)' },
+            { color: '#ccff33', value: 0.3, label: 'Shrubs/Brush (0.3 ≤ NDVI < 0.4)' },
+            { color: '#66e619', value: 0.4, label: 'Moderate Vegetation (0.4 ≤ NDVI < 0.5)' },
+            { color: '#33b333', value: 0.5, label: 'Dense Grass/Crops (0.5 ≤ NDVI < 0.6)' },
+            { color: '#1a801a', value: 0.6, label: 'Deciduous Forest (0.6 ≤ NDVI < 0.7)' },
+            { color: '#004d00', value: 1.0, label: 'Evergreen Forest (NDVI ≥ 0.7)' }
         ];
         
         // Create gradient string
