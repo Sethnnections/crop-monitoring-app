@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
-GEOJSON_PATH = 'assets/irregularshape.geojson'
+GEOJSON_PATH = 'assets/sample.geojson'
 
 def calculate_ndvi(red, nir):
     red = np.asarray(red, dtype=np.float32)
