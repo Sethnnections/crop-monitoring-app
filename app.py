@@ -117,8 +117,8 @@ def get_geometry_from_geojson(geojson_data):
         logger.error(f"Error creating geometry: {e}")
         raise
 
-@app.route('/')
-def index():
+@app.route('/monitoring/<int:farmer_id>')
+def monitoring(farmer_id):
     try:
         with open(GEOJSON_PATH) as f:
             geojson_data = json.load(f)
