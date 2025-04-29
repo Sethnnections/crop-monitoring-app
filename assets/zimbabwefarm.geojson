@@ -1,0 +1,26 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Chiedza Smallholding",
+          "location": "Zimbabwe, Mashonaland Central",
+          "size": "1.5 hectares",
+          "use": "Subsistence farming (maize, beans)"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [31.123456, -17.654321],  
+              [31.123567, -17.654210],  
+              [31.123678, -17.654345],   
+              [31.123567, -17.654456],  
+              [31.123456, -17.654321]  
+            ]
+          ]
+        }
+      }
+    ]
+  }

@@ -1,10 +1,13 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize map
+document.addEventListener('DOMContentLoaded', function () {
+    // Initialize map with ArcGIS World Imagery
     const map = new ol.Map({
         target: 'map',
         layers: [
             new ol.layer.Tile({
-                source: new ol.source.OSM()
+                source: new ol.source.XYZ({
+                    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    attributions: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                })
             })
         ],
         view: new ol.View({
@@ -12,6 +15,9 @@ document.addEventListener('DOMContentLoaded', function() {
             zoom: 12
         })
     });
+
+    // Value display element
+    const valueDisplay = document.getElementById('value-display');
 
     // Validate and process GeoJSON data
     function validateAndProcessGeoJSON(geojson) {
@@ -80,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Fit view to GeoJSON extent with padding
     try {
-        map.getView().fit(vectorSource.getExtent(), { 
+        map.getView().fit(vectorSource.getExtent(), {
             padding: [50, 50, 50, 50],
             duration: 1000 // Smooth animation
         });
@@ -90,12 +96,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // NDVI layer reference
     let ndviLayer = null;
+    let ndviImageData = null; // Store the original NDVI image data
 
     // Enhanced NDVI button click handler
-    document.getElementById('load-ndvi').addEventListener('click', function() {
+    document.getElementById('load-ndvi').addEventListener('click', function () {
         const button = this;
         button.disabled = true;
-        button.textContent = 'Loading...';
+        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
 
         // Show loading indicator
         const loadingIndicator = document.createElement('div');
@@ -110,7 +117,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('GeoJSON validation failed:', error);
             button.disabled = false;
-            button.textContent = 'Load NDVI';
+            button.textContent = 'Load NDVI Data';
             document.body.removeChild(loadingIndicator);
             alert('Invalid boundary: ' + error.message);
             return;
@@ -123,52 +130,58 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify(validGeoJSON)
         })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Server error: ${response.status} ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Clean up UI
-            button.disabled = false;
-            button.textContent = 'Load NDVI';
-            document.body.removeChild(loadingIndicator);
-
-            if (data.status === 'success') {
-                // Remove previous NDVI layer if exists
-                if (ndviLayer) {
-                    map.removeLayer(ndviLayer);
-                    ndviLayer = null;
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
                 }
+                return response.json();
+            })
+            .then(data => {
+                // Clean up UI
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-cloud-arrow-down"></i> Load NDVI Data';
+                document.body.removeChild(loadingIndicator);
 
-                // Process the NDVI image data
-                processNdviImage(data.image, vectorSource)
-                    .then(imageLayer => {
-                        ndviLayer = imageLayer;
-                        map.addLayer(ndviLayer);
-                        
-                        // Zoom to the NDVI layer with animation
-                        map.getView().fit(vectorSource.getExtent(), { 
-                            padding: [50, 50, 50, 50],
-                            duration: 1000
+                if (data.status === 'success') {
+                    // Remove previous NDVI layer if exists
+                    if (ndviLayer) {
+                        map.removeLayer(ndviLayer);
+                        ndviLayer = null;
+                    }
+
+                    // Store the image data for hover functionality
+                    ndviImageData = data.image;
+
+                    // Process the NDVI image data
+                    processNdviImage(data.image, vectorSource)
+                        .then(imageLayer => {
+                            ndviLayer = imageLayer;
+                            map.addLayer(ndviLayer);
+
+                            // Zoom to the NDVI layer with animation
+                            map.getView().fit(vectorSource.getExtent(), {
+                                padding: [50, 50, 50, 50],
+                                duration: 1000
+                            });
+
+                            // Show legend by default
+                            document.getElementById('ndvi-legend').style.display = 'block';
+                        })
+                        .catch(error => {
+                            console.error('NDVI processing error:', error);
+                            alert('Error displaying NDVI: ' + error.message);
                         });
-                    })
-                    .catch(error => {
-                        console.error('NDVI processing error:', error);
-                        alert('Error displaying NDVI: ' + error.message);
-                    });
-            } else {
-                throw new Error(data.message || 'Unknown error occurred');
-            }
-        })
-        .catch(error => {
-            console.error('NDVI request failed:', error);
-            button.disabled = false;
-            button.textContent = 'Load NDVI';
-            document.body.removeChild(loadingIndicator);
-            alert('NDVI request failed: ' + error.message);
-        });
+                } else {
+                    throw new Error(data.message || 'Unknown error occurred');
+                }
+            })
+            .catch(error => {
+                console.error('NDVI request failed:', error);
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-cloud-arrow-down"></i> Load NDVI Data';
+                document.body.removeChild(loadingIndicator);
+                alert('NDVI request failed: ' + error.message);
+            });
     });
 
     /**
@@ -187,7 +200,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Get dimensions
                 const height = imageData.length;
                 const width = imageData[0].length;
-                
+
                 // Flatten the 3D array into a 1D array of RGBA values
                 const flatPixels = [];
                 for (const row of imageData) {
@@ -207,18 +220,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
-                
+
                 // Create ImageData
                 const imageArray = new Uint8ClampedArray(flatPixels);
                 const imageDataObj = new ImageData(imageArray, width, height);
-                
+
                 // Draw on canvas
                 ctx.putImageData(imageDataObj, 0, 0);
-                
+
                 // Create image layer
                 const extent = source.getExtent();
                 const imageUrl = canvas.toDataURL('image/png');
-                
+
                 const imageLayer = new ol.layer.Image({
                     source: new ol.source.ImageStatic({
                         url: imageUrl,
@@ -235,46 +248,96 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-        // Checkbox toggle for NDVI layer
-        document.getElementById('toggle-ndvi').addEventListener('change', function () {
-            if (ndviLayer) {
-                if (this.checked) {
-                    map.addLayer(ndviLayer);
-                    document.getElementById('ndvi-legend').style.display = 'block';
-                } else {
-                    map.removeLayer(ndviLayer);
-                    document.getElementById('ndvi-legend').style.display = 'none';
-                }
+    // Checkbox toggle for NDVI layer
+    document.getElementById('toggle-ndvi').addEventListener('change', function () {
+        if (ndviLayer) {
+            if (this.checked) {
+                map.addLayer(ndviLayer);
+                document.getElementById('ndvi-legend').style.display = 'block';
+            } else {
+                map.removeLayer(ndviLayer);
+                document.getElementById('ndvi-legend').style.display = 'none';
             }
-        });
+        }
+    });
 
+    // Opacity slider control
+    const opacitySlider = document.getElementById('opacity-slider');
+    const opacityValue = document.querySelector('.opacity-value');
+
+    opacitySlider.addEventListener('input', function () {
+        const opacity = parseFloat(this.value);
+        opacityValue.textContent = `${Math.round(opacity * 100)}%`;
+
+        if (ndviLayer) {
+            ndviLayer.setOpacity(opacity);
+        }
+    });
+
+    // Mouse move handler for value display
+    map.on('pointermove', function (evt) {
+        if (!ndviImageData || !ndviLayer || !document.getElementById('toggle-ndvi').checked) {
+            valueDisplay.style.display = 'none';
+            return;
+        }
+
+        const coordinate = evt.coordinate;
+        const extent = ndviLayer.getSource().getImageExtent();
+        const resolution = map.getView().getResolution();
+
+        // Check if the coordinate is within the NDVI image extent
+        if (!ol.extent.containsCoordinate(extent, coordinate)) {
+            valueDisplay.style.display = 'none';
+            return;
+        }
+
+        // Calculate pixel position in the image
+        const width = ndviImageData[0].length;
+        const height = ndviImageData.length;
+
+        const x = Math.floor((coordinate[0] - extent[0]) / (extent[2] - extent[0]) * width);
+        const y = Math.floor((extent[3] - coordinate[1]) / (extent[3] - extent[1]) * height);
+
+        // Ensure we're within bounds
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+            const pixel = ndviImageData[y][x];
+
+            // Calculate NDVI value from RGBA (assuming server sends NDVI encoded in RGBA)
+            // This calculation depends on how your server encodes NDVI values in the image
+            // Here's a common approach where NDVI is encoded in the red channel
+            const ndviValue = (pixel[0] / 255 * 2) - 1; // Scale from [0,255] to [-1,1]
+
+            valueDisplay.textContent = `NDVI: ${ndviValue.toFixed(4)}`;
+            valueDisplay.style.display = 'block';
+        } else {
+            valueDisplay.style.display = 'none';
+        }
+    });
+
+    // Hide value display when mouse leaves map
+    map.getViewport().addEventListener('mouseout', function () {
+        valueDisplay.style.display = 'none';
+    });
 
     // Add NDVI legend
     createNdviLegend();
-    
+
     /**
      * Creates and styles the NDVI legend with enhanced visualization
      */
     function createNdviLegend() {
         const legend = document.getElementById('ndvi-legend');
-        
+
+        // Enhanced color gradient with more stops for better visualization
+
         const gradientStops = [
-            { color: '#050505', value: -1.0, label: 'Water/Built-up (NDVI < -0.5)' },
-            { color: '#bfbfbf', value: -0.5, label: 'Bare Soil/Urban (-0.5 ≤ NDVI < -0.2)' },
-            { color: '#dbdbdb', value: -0.2, label: 'Dry Soil/Rock (-0.2 ≤ NDVI < -0.1)' },
-            { color: '#ebebeb', value: -0.1, label: 'Sand/Snow (-0.1 ≤ NDVI < 0)' },
-            { color: '#ffffff', value: 0.0, label: 'No Vegetation (0 ≤ NDVI < 0.05)' },
-            { color: '#ff3333', value: 0.05, label: 'Stress/Burned (0.05 ≤ NDVI < 0.1)' },
-            { color: '#ff9900', value: 0.1, label: 'Sparse Grass/Shrubs (0.1 ≤ NDVI < 0.15)' },
-            { color: '#ffe600', value: 0.15, label: 'Moderate Grassland (0.15 ≤ NDVI < 0.2)' },
-            { color: '#ffff33', value: 0.2, label: 'Healthy Pasture (0.2 ≤ NDVI < 0.3)' },
-            { color: '#ccff33', value: 0.3, label: 'Shrubs/Brush (0.3 ≤ NDVI < 0.4)' },
-            { color: '#66e619', value: 0.4, label: 'Moderate Vegetation (0.4 ≤ NDVI < 0.5)' },
-            { color: '#33b333', value: 0.5, label: 'Dense Grass/Crops (0.5 ≤ NDVI < 0.6)' },
-            { color: '#1a801a', value: 0.6, label: 'Deciduous Forest (0.6 ≤ NDVI < 0.7)' },
-            { color: '#004d00', value: 1.0, label: 'Evergreen Forest (NDVI ≥ 0.7)' }
+            { color: '#050505', value: -1.0, label: 'Excellent Health'},
+            { color: '#dbdbdb', value: -0.7, label: 'Good Health' },  // Changed from -0.2 to -0.5
+            { color: '#ff0000', value: -0.5, label: 'Moderate Health' },
+            { color: '#ff9900', value: 0.5, label: 'Highly Stressed' },
+            { color: '#66e619', value: 0.7, label:  'Bare Soil'},
+            { color: '#1a801a', value: 1.0, label:  'No Data/Water' },
         ];
-        
         // Create gradient string
         let gradientString = 'linear-gradient(to bottom, ';
         gradientStops.forEach((stop, index) => {
@@ -284,7 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 gradientString += ', ';
             }
         });
-        
+
         // Apply to legend
         const gradientElement = legend.querySelector('.legend-gradient');
         gradientElement.style.background = gradientString;
@@ -292,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add value markers and labels
         const labelsContainer = legend.querySelector('.legend-labels');
         labelsContainer.innerHTML = '';
-        
+
         gradientStops.forEach(stop => {
             if (stop.label) {
                 const position = ((stop.value + 1) / 2) * 100;
@@ -305,48 +368,4 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-
-    // Add CSS for loading indicator
-    const style = document.createElement('style');
-    style.textContent = `
-        .loading-indicator {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            color: white;
-            font-size: 1.2em;
-        }
-        .spinner {
-            border: 5px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top: 5px solid #fff;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 15px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .legend-label {
-            position: absolute;
-            left: 110%;
-            transform: translateY(50%);
-            white-space: nowrap;
-        }
-        .legend-value {
-            font-weight: bold;
-            margin-right: 5px;
-        }
-    `;
-    document.head.appendChild(style);
 });
