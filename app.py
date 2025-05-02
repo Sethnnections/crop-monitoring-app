@@ -168,13 +168,43 @@ def get_geometry_from_geojson(geojson_data):
 @app.route('/monitoring/<int:farmer_id>')
 def monitoring(farmer_id):
     try:
-        geojson_data = get_farm_geojson(farmer_id)
-        centroid = get_geojson_centroid(geojson_data)
-        logger.info("Rendering index page with GeoJSON and centroid.")
+        url = f"{API_BASE_URL}/{farmer_id}/farms"
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        
+        if not data.get('farms') or len(data['farms']) == 0:
+            raise ValueError("No farms found for this farmer")
+        
+        # Get the first farm's boundary for initial map display
+        first_farm = data['farms'][0]
+        if not first_farm.get('boundary'):
+            raise ValueError("Farm boundary data not found")
+        
+        initial_geojson = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "name": first_farm.get('name'),
+                        "size": first_farm.get('size'),
+                        "location": first_farm.get('location')
+                    },
+                    "geometry": first_farm['boundary']
+                }
+            ]
+        }
+        
+        centroid = get_geojson_centroid(initial_geojson)
+        
         return render_template('index.html', 
-                             center=centroid, 
-                             geojson=json.dumps(geojson_data),
-                             farmer_id=farmer_id)
+                            center=centroid,
+                            geojson=json.dumps(initial_geojson),
+                            farmer=data['farms'][0]['farmer'],  # Pass farmer info
+                            farms=data['farms'],                # Pass all farms
+                            selected_farm=first_farm            # Pass initial farm
+                            )
     except Exception as e:
         logger.error(f"Failed to render index: {e}")
         return "Error loading map data", 500
