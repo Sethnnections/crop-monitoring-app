@@ -2,6 +2,7 @@ import logging
 from flask import Flask, render_template, jsonify, request
 from config import Config
 import json
+import requests  # Added for API requests
 from shapely.geometry import shape, mapping, Polygon, MultiPolygon
 from shapely.ops import transform
 from functools import partial
@@ -28,7 +29,54 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
-GEOJSON_PATH = 'assets/sample.geojson'
+API_BASE_URL = 'http://localhost:3000/api/farmers'
+
+def get_farm_geojson(farmer_id):
+    """Fetch farm data from API and convert to GeoJSON format"""
+    try:
+        url = f"{API_BASE_URL}/{farmer_id}/farms"
+        logger.debug(f"Fetching farm data from: {url}")
+        
+        response = requests.get(url)
+        response.raise_for_status()  # Raises exception for 4XX/5XX status codes
+        
+        data = response.json()
+        logger.debug(f"API response: {data}")
+        
+        if not data.get('farms') or len(data['farms']) == 0:
+            raise ValueError("No farms found for this farmer")
+        
+        # Convert the first farm's boundary to GeoJSON FeatureCollection format
+        farm = data['farms'][0]
+        boundary = farm.get('boundary')
+        
+        if not boundary:
+            raise ValueError("Farm boundary data not found")
+        
+        geojson = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "name": farm.get('name'),
+                        "size": farm.get('size'),
+                        "location": farm.get('location')
+                    },
+                    "geometry": boundary
+                }
+            ]
+        }
+        
+        logger.debug(f"Converted GeoJSON: {geojson}")
+        return geojson
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error processing farm data: {e}")
+        raise
 
 def calculate_ndvi(red, nir):
     red = np.asarray(red, dtype=np.float32)
@@ -120,11 +168,13 @@ def get_geometry_from_geojson(geojson_data):
 @app.route('/monitoring/<int:farmer_id>')
 def monitoring(farmer_id):
     try:
-        with open(GEOJSON_PATH) as f:
-            geojson_data = json.load(f)
+        geojson_data = get_farm_geojson(farmer_id)
         centroid = get_geojson_centroid(geojson_data)
         logger.info("Rendering index page with GeoJSON and centroid.")
-        return render_template('index.html', center=centroid, geojson=json.dumps(geojson_data))
+        return render_template('index.html', 
+                             center=centroid, 
+                             geojson=json.dumps(geojson_data),
+                             farmer_id=farmer_id)
     except Exception as e:
         logger.error(f"Failed to render index: {e}")
         return "Error loading map data", 500
@@ -157,7 +207,7 @@ function setup() {
         input: ["B03","B04", "B08", "dataMask"],
         output: [
             { id: "default", bands: 4 },
-			{ id: "index", bands: 1, sampleType: "FLOAT32" },
+            { id: "index", bands: 1, sampleType: "FLOAT32" },
             { id: "eobrowserStats", bands: 2, sampleType: 'FLOAT32' },
             { id: "dataMask", bands: 1 }
         ]
