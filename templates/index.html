@@ -27,6 +27,7 @@
         body {
             background-color: var(--background-light);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Prevent body scrolling */
         }
         
         .dashboard-header {
@@ -37,6 +38,9 @@
             align-items: center;
             justify-content: space-between;
             margin-bottom: 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
         
         .logo-container {
@@ -132,7 +136,7 @@
         }
         
         .map-container {
-            height: 750px;
+            height: calc(100vh - 120px);
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
@@ -201,6 +205,36 @@
                 transform: translateY(0);
             }
         }
+
+        /* New styles for scrollable column */
+        .scrollable-column {
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .scrollable-column::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scrollable-column::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .scrollable-column::-webkit-scrollbar-thumb {
+            background: var(--light-green);
+            border-radius: 10px;
+        }
+
+        .scrollable-column::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-green);
+        }
+
+        /* Adjust row height */
+        .dashboard-row {
+            height: calc(100vh - 120px);
+        }
     </style>
 </head>
 
@@ -219,9 +253,9 @@
             </div>
         </div>
 
-        <div class="row g-4">
-            <!-- Left Column - Controls -->
-            <div class="col-md-4">
+        <div class="row g-4 dashboard-row">
+            <!-- Left Column - Controls (now scrollable) -->
+            <div class="col-md-4 scrollable-column">
                 <!-- Farmer Info Card -->
                 <div class="farmer-info-card animate__animated animate__fadeIn">
                     <h3 class="farmer-name">{{ farmer.name }} {{ farmer.surname }}</h3>
@@ -281,8 +315,8 @@
                         <div class="opacity-control">
                             <label for="opacity-slider" class="form-label"><i class="bi bi-brightness-high" style="color: var(--deep-green);"></i> NDVI Opacity</label>
                             <input type="range" class="form-range opacity-slider" id="opacity-slider" min="0"
-                                max="1" step="0.1" value="0.8">
-                            <div class="opacity-value text-end text-muted">80%</div>
+                                max="1" step="0.1" value="0.6">
+                            <div class="opacity-value text-end text-muted">60%</div>
                         </div>
                     </div>
                 </div>
@@ -638,7 +672,7 @@
                             imageExtent: extent,
                             projection: 'EPSG:3857'
                         }),
-                        opacity: 0.8
+                        opacity: 0.6
                     });
 
                     resolve(imageLayer);
