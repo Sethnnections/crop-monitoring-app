@@ -234,7 +234,14 @@
         /* Adjust row height */
         .dashboard-row {
             height: calc(100vh - 120px);
-        }
+        }.date-range-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
     </style>
 </head>
 
@@ -244,14 +251,41 @@
         <div class="dashboard-header animate__animated animate__fadeInDown">
             <div class="logo-container">
                 <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="Logo" class="animate__animated animate__fadeInLeft">
-                <h1 class="h3 mb-0 animate__animated animate__fadeIn">Farmer: {{ farmer.name }} {{ farmer.surname }}</h1>
+                <h1 class="h3 mb-0 animate__animated animate__fadeIn">
+                    Farmer: {{ farmer.name }} {{ farmer.surname }}
+                </h1>
             </div>
+        
+            <div class="date-range-container animate__animated animate__fadeIn">
+                <div class="date-range-container mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="start-date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start-date" style="border: 1px solid var(--deep-green); border-radius: 6px; padding: 0.5rem;">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="end-date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end-date" style="border: 1px solid var(--deep-green); border-radius: 6px; padding: 0.5rem;">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button id="apply-dates" class="btn btn-primary w-400" style="background-color: var(--deep-green); border: none; border-radius: 8px; padding: 0.8rem;">Apply</button>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <div id="selected-period" class="text-muted lg" style="font-weight: bold; color: var(--deep-green); font-size: 1.0rem; text-align: center;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        
             <div class="user-info">
                 <button class="logout-btn animate__animated animate__fadeIn">
                     <i class="bi bi-box-arrow-right"></i> Logout
                 </button>
             </div>
         </div>
+        
 
         <div class="row g-4 dashboard-row">
             <!-- Left Column - Controls (now scrollable) -->
@@ -391,6 +425,36 @@
         // Value display element
         const valueDisplay = document.getElementById('value-display');
 
+        // Initialize date pickers with default values (current month)
+        function initializeDatePickers() {
+            const today = new Date();
+            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            
+            document.getElementById('start-date').valueAsDate = firstDayOfMonth;
+            document.getElementById('end-date').valueAsDate = today;
+            
+            updateSelectedPeriodDisplay();
+        }
+        
+        // Update the selected period display text
+        function updateSelectedPeriodDisplay() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            if (startDate && endDate) {
+                const formattedStart = new Date(startDate).toLocaleDateString();
+                const formattedEnd = new Date(endDate).toLocaleDateString();
+                document.getElementById('selected-period').textContent = `Selected period: ${formattedStart} to ${formattedEnd}`;
+            }
+        }
+
+        // Initialize date pickers when the page loads
+        initializeDatePickers();
+        
+        // Add event listeners for date changes
+        document.getElementById('start-date').addEventListener('change', updateSelectedPeriodDisplay);
+        document.getElementById('end-date').addEventListener('change', updateSelectedPeriodDisplay);
+
         // Validate and process GeoJSON data
         function validateAndProcessGeoJSON(geojson) {
             try {
@@ -527,7 +591,7 @@
             document.getElementById('ndvi-legend').style.display = 'none';
         }
 
-        // Enhanced NDVI button click handler
+        // Enhanced NDVI button click handler with date range
         document.getElementById('load-ndvi').addEventListener('click', function () {
             const button = this;
             button.disabled = true;
@@ -543,6 +607,31 @@
             const selectedOption = document.getElementById('farm-select').options[document.getElementById('farm-select').selectedIndex];
             const currentGeoJSON = JSON.parse(selectedOption.dataset.geojson);
 
+            // Get date range values
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+
+            // Validate dates
+            if (!startDate || !endDate) {
+                alert('Please select both start and end dates');
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-cloud-arrow-down"></i> Load NDVI Data';
+                document.body.removeChild(loadingIndicator);
+                return;
+            }
+
+            if (new Date(startDate) > new Date(endDate)) {
+                alert('End date must be after start date');
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-cloud-arrow-down"></i> Load NDVI Data';
+                document.body.removeChild(loadingIndicator);
+                return;
+            }
+
+            // Add dates to the GeoJSON payload
+            currentGeoJSON.start_date = startDate;
+            currentGeoJSON.end_date = endDate;
+
             // Validate GeoJSON before sending
             let validGeoJSON;
             try {
@@ -550,7 +639,7 @@
             } catch (error) {
                 console.error('GeoJSON validation failed:', error);
                 button.disabled = false;
-                button.textContent = 'Load NDVI Data';
+                button.innerHTML = '<i class="bi bi-cloud-arrow-down"></i> Load NDVI Data';
                 document.body.removeChild(loadingIndicator);
                 alert('Invalid boundary: ' + error.message);
                 return;
@@ -810,6 +899,14 @@
                 window.location.href = '/logout';
             }
         });
+
+        // Apply dates button functionality
+        document.getElementById('apply-dates').addEventListener('click', function() {
+            // This just updates the display - the actual dates are used when loading NDVI
+            updateSelectedPeriodDisplay();
+        });
     </script>
 </body>
 </html>
+
+

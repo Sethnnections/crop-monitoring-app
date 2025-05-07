@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, date
 from flask import Flask, render_template, jsonify, request
 from config import Config
 import json
@@ -209,12 +210,26 @@ def monitoring(farmer_id):
         logger.error(f"Failed to render index: {e}")
         return "Error loading map data", 500
 
+
 @app.route('/get-ndvi', methods=['POST'])
 def get_ndvi():
     try:
         geojson_data = request.json
         logger.info("Received NDVI request")
-        
+
+        # Extract optional date parameters from the query string or JSON
+        start_date = request.args.get('start_date') or geojson_data.get('start_date')
+        end_date = request.args.get('end_date') or geojson_data.get('end_date')
+
+        # Fallback to current month's first day and now
+        if not start_date or not end_date:
+            today = datetime.utcnow()
+            start_date = date(today.year, today.month, 1).isoformat()
+            end_date = today.isoformat()
+
+        time_interval = (start_date, end_date)
+        logger.info(f"Using time interval: {time_interval}")
+
         # Validate and process the GeoJSON
         validate_geojson(geojson_data)
         geometry = get_geometry_from_geojson(geojson_data)
@@ -228,9 +243,6 @@ def get_ndvi():
         config.sh_client_secret = app.config['SH_CLIENT_SECRET']
         config.instance_id = app.config['SH_INSTANCE_ID']
 
-        time_interval = ('2023-01-01', '2023-01-30')
-
-        # Your existing evalscript here...
         evalscript = """//VERSION=3
 function setup() {
     return {
@@ -277,6 +289,7 @@ function isCloud(samples){
     return bRatio > 1 || (bRatio > 0 && NGDR > 0);
 }"""
 
+
         request_sh = SentinelHubRequest(
             evalscript=evalscript,
             input_data=[
@@ -305,6 +318,7 @@ function isCloud(samples){
     except Exception as e:
         logger.exception("Error processing NDVI request")
         return jsonify({'status': 'error', 'message': str(e)})
+  
 
 if __name__ == '__main__':
     app.run(debug=True)
