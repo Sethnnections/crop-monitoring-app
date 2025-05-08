@@ -27,11 +27,11 @@
             background:
                 url("{{ url_for('static', filename='img/im.jpg') }}") no-repeat center center fixed;
             background-size: cover;
-            height: 100vh;
-            display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            padding: 4rem;
+            color: white;
         }
         
         .dashboard-header {
@@ -41,12 +41,12 @@
             padding: 2px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             display: flex;
-            align-items: center;
             justify-content: space-between;
             margin-bottom: 2rem;
             position: sticky;
             top: 0;
             z-index: 1000;
+            width: 100%;
         }
         
         .logo-container {
@@ -182,7 +182,7 @@
         
         .farmer-name {
             font-size: 1.5rem;
-            color: var(--deep-green);
+            color: white;
             margin-bottom: 0.5rem;
         }
         
@@ -194,13 +194,13 @@
         .detail-item {
             display: flex;
             margin-bottom: 0.5rem;
-            color: var(--light-green);
+            color:white;
         }
         
         .detail-label {
             font-weight: 600;
             min-width: 100px;
-            color: var(--deep-green);
+            color: white;
         }
         
         .farm-selector {
@@ -293,7 +293,7 @@
                     </div>
                     <div class="row mt-2">
                         <div class="col-12">
-                            <div id="selected-period" class="text-muted lg" style="font-weight: bold; color: var(--deep-green); font-size: 1.0rem; text-align: center;"></div>
+                            <div id="selected-period" class="text lg" style="font-weight: bold; color: white; font-size: 1.0rem; text-align: center;"></div>
                         </div>
                     </div>
                 </div>
@@ -381,9 +381,9 @@
                         <h5 class="card-title mb-0"><i class="bi bi-palette"></i> NDVI Legend</h5>
                     </div>
                     <div class="card-body">
-                        <div id="ndvi-legend">
+                        <div id="ndvi-legend" style="color: white; ">
                             <div class="legend-gradient"></div>
-                            <div class="legend-labels">
+                            <div class="legend-labels " style="color: white;">
                                 <span>-1.0</span>
                                 <span>0</span>
                                 <span>+1.0</span>
