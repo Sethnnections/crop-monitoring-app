@@ -13,711 +13,254 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <!-- Animate.css -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- AOS Animation Library -->
-    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     <style>
         :root {
-            --deep-green: #0a2e1a;
-            --dark-green: #1a4d2e;
-            --medium-green: #2e7d32;
+            --deep-green: #1a4d2e;
             --light-green: #4f9d69;
-            --yellow-green: #8bc34a;
             --accent-green: #3a7d44;
-            --bright-green: #a5d6a7;
-            --background-dark: #121e17;
             --background-light: #f5f9f6;
-            --text-white: #ffffff;
-            --text-light: #e0e0e0;
-            --card-shadow: 0 8px 30px rgba(0, 40, 20, 0.12);
-            --transition-all: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
         }
         
         body {
-            background-color: var(--background-dark);
-            font-family: 'Poppins', sans-serif;
-            color: var(--text-light);
-            overflow: hidden;
-            min-height: 100vh;
+            background-color: var(--background-light);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Prevent body scrolling */
         }
         
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--yellow-green);
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--light-green);
-        }
-        
-        /* Glow Effects */
-        .glow-on-hover {
-            transition: var(--transition-all);
-        }
-        .glow-on-hover:hover {
-            box-shadow: 0 0 15px rgba(139, 195, 74, 0.5);
-        }
-        
-        /* Dashboard Header */
         .dashboard-header {
-            background: linear-gradient(135deg, var(--deep-green) 0%, var(--dark-green) 100%);
-            padding: 1rem 2rem;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            background-color:#0b2e1a;
+            border-radius: 12px;
+            width: 100%;
+            color: white;
+            padding: 2px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
             position: sticky;
             top: 0;
             z-index: 1000;
-            border-bottom: 1px solid rgba(139, 195, 74, 0.2);
         }
         
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 1.5rem;
+            gap: 1rem;
+            padding: 0.5rem;
+            background-color: var(--background-light);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
         
         .logo-container img {
             height: 50px;
             width: auto;
-            transition: transform 0.5s ease, filter 0.5s ease;
-            filter: drop-shadow(0 0 5px rgba(139, 195, 74, 0.5));
+            transition: transform 0.3s ease;
+            border-radius: 100%;
+
         }
         
         .logo-container:hover img {
-            transform: rotate(5deg) scale(1.05);
-            filter: drop-shadow(0 0 10px rgba(139, 195, 74, 0.8));
+            transform: rotate(5deg);
         }
         
-        .header-title {
-            font-weight: 600;
-            color: var(--text-white);
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            letter-spacing: 0.5px;
-            position: relative;
-        }
-        
-        .header-title::after {
-            content: '';
-            position: absolute;
-            bottom: -5px;
-            left: 0;
-            width: 50%;
-            height: 2px;
-            background: var(--yellow-green);
-            transform: scaleX(0);
-            transform-origin: left;
-            transition: transform 0.3s ease;
-        }
-        
-        .logo-container:hover .header-title::after {
-            transform: scaleX(1);
-        }
-        
-        /* Date Range Picker */
-        .date-range-container {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            background: rgba(10, 46, 26, 0.6);
-            padding: 0.8rem 1.5rem;
-            border-radius: 12px;
-            border: 1px solid rgba(139, 195, 74, 0.3);
-            backdrop-filter: blur(5px);
-            transition: var(--transition-all);
-        }
-        
-        .date-range-container:hover {
-            border-color: var(--yellow-green);
-            box-shadow: 0 0 15px rgba(139, 195, 74, 0.2);
-        }
-        
-        .date-range-container label {
-            color: var(--bright-green);
-            font-weight: 500;
-            margin-bottom: 0.3rem;
-            font-size: 0.9rem;
-        }
-        
-        .date-range-container input {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(139, 195, 74, 0.3);
-            color: var(--text-white);
-            border-radius: 8px;
-            padding: 0.6rem;
-            transition: var(--transition-all);
-        }
-        
-        .date-range-container input:focus {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: var(--yellow-green);
-            box-shadow: 0 0 0 0.25rem rgba(139, 195, 74, 0.25);
-            color: var(--text-white);
-        }
-        
-        .date-range-container input::placeholder {
-            color: rgba(255, 255, 255, 0.5);
-        }
-        
-        #selected-period {
-            font-weight: 500;
-            color: var(--yellow-green);
-            font-size: 0.95rem;
-            text-align: center;
-            margin-top: 0.5rem;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-        }
-        
-        /* User Info */
         .user-info {
             display: flex;
             align-items: center;
-            gap: 1.5rem;
+            gap: 1rem;
         }
         
         .logout-btn {
-            background: linear-gradient(135deg, var(--medium-green) 0%, var(--dark-green) 100%);
-            color: var(--text-white);
+            background-color: var(--deep-green);
+            color: white;
             border: none;
-            padding: 0.7rem 1.5rem;
-            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
             display: flex;
             align-items: center;
-            gap: 0.7rem;
-            font-weight: 500;
-            transition: var(--transition-all);
-            box-shadow: 0 4px 15px rgba(26, 77, 46, 0.3);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .logout-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: 0.5s;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
         }
         
         .logout-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(26, 77, 46, 0.4);
+            background-color: var(--accent-green);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(26, 77, 46, 0.3);
         }
         
-        .logout-btn:hover::before {
-            left: 100%;
-        }
-        
-        /* Dashboard Layout */
-        .dashboard-row {
-            height: calc(100vh - 120px);
-            margin: 0;
-        }
-        
-        /* Left Column - Controls */
-        .scrollable-column {
-            height: calc(100vh - 120px);
-            overflow-y: auto;
-            padding-right: 15px;
-            padding-left: 5px;
-        }
-        
-        /* Farmer Info Card */
-        .farmer-info-card {
-            background: linear-gradient(145deg, rgba(26, 77, 46, 0.8) 0%, rgba(10, 46, 26, 0.9) 100%);
-            border-radius: 16px;
-            padding: 1.8rem;
-            margin-bottom: 1.8rem;
-            box-shadow: var(--card-shadow);
-            border: 1px solid rgba(139, 195, 74, 0.2);
-            backdrop-filter: blur(5px);
-            transition: var(--transition-all);
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
+            background-color: #0b2e1a;
+            color: white;
+            padding: 1.5rem;
             position: relative;
-            overflow: hidden;
         }
         
-        .farmer-info-card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(139, 195, 74, 0.1) 0%, transparent 70%);
-            transform: rotate(30deg);
-            transition: var(--transition-all);
-        }
-        
-        .farmer-info-card:hover {
+        .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 12px 35px rgba(0, 40, 20, 0.2);
-            border-color: rgba(139, 195, 74, 0.4);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
         }
         
-        .farmer-info-card:hover::before {
-            transform: rotate(45deg);
+        .card-header {
+            background-color: var(--deep-green);
+            color: white;
+            border-radius: 12px 12px 0 0 !important;
+            padding: 1rem 1.5rem;
+        }
+        
+        .btn-ndvi {
+            background-color: var(--deep-green);
+            color: white;
+            width: 100%;
+            padding: 0.75rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-ndvi:hover {
+            background-color: var(--accent-green);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(26, 77, 46, 0.3);
+        }
+        
+        .form-check-input:checked {
+            background-color: var(--deep-green);
+            border-color: var(--deep-green);
+        }
+        
+        .form-range::-webkit-slider-thumb {
+            background: var(--deep-green);
+        }
+        
+        .form-range::-moz-range-thumb {
+            background: var(--deep-green);
+        }
+        
+        .form-range::-ms-thumb {
+            background: var(--deep-green);
+        }
+        
+        .map-container {
+            height: calc(100vh - 120px);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+            background-color: #0b2e1a;
+            border: 2px solid var(--deep-green);
+            transition: all 0.3s ease;
+        }
+        
+        .value-display {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        
+        .farmer-info-card {
+            background-color: #0b2e1a;
+            color: white;
+        
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
         }
         
         .farmer-name {
-            font-size: 1.6rem;
-            color: var(--text-white);
-            margin-bottom: 0.8rem;
-            font-weight: 600;
-            position: relative;
-            display: inline-block;
-        }
-        
-        .farmer-name::after {
-            content: '';
-            position: absolute;
-            bottom: -5px;
-            left: 0;
-            width: 50px;
-            height: 3px;
-            background: var(--yellow-green);
-            border-radius: 3px;
-        }
-        
-        /* Farm Selector */
-        .farm-selector {
-            margin-top: 1.5rem;
-        }
-        
-        .farm-selector label {
-            color: var(--bright-green);
-            font-weight: 500;
+            font-size: 1.5rem;
+            color: var(--deep-green);
             margin-bottom: 0.5rem;
-            display: block;
         }
         
-        .form-select {
-            background-color: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(139, 195, 74, 0.3);
-            color: var(--text-white);
-            border-radius: 10px;
-            padding: 0.7rem 1rem;
-            transition: var(--transition-all);
-            box-shadow: none;
-        }
-        
-        .form-select:focus {
-            background-color: rgba(255, 255, 255, 0.15);
-            border-color: var(--yellow-green);
-            box-shadow: 0 0 0 0.25rem rgba(139, 195, 74, 0.25);
-            color: var(--text-white);
-        }
-        
-        .form-select option {
-            background-color: var(--dark-green);
-            color: var(--text-white);
-        }
-        
-        /* Farm Details */
         .farm-details {
-            margin-top: 1.5rem;
-            background: rgba(0, 0, 0, 0.15);
-            padding: 1.2rem;
-            border-radius: 12px;
-            border-left: 3px solid var(--yellow-green);
+            margin-top: 1rem;
+            color: white;
         }
         
         .detail-item {
             display: flex;
-            margin-bottom: 0.8rem;
-            align-items: center;
+            margin-bottom: 0.5rem;
+            color: var(--light-green);
         }
         
         .detail-label {
             font-weight: 600;
             min-width: 100px;
-            color: var(--bright-green);
-            font-size: 0.9rem;
+            color: var(--deep-green);
         }
         
-        .detail-value {
-            color: var(--text-white);
-            font-weight: 500;
+        .farm-selector {
+            margin-top: 1rem;
         }
         
-        /* Cards */
-        .card {
-            background: linear-gradient(145deg, rgba(26, 77, 46, 0.8) 0%, rgba(10, 46, 26, 0.9) 100%);
-            border: none;
-            border-radius: 16px;
-            box-shadow: var(--card-shadow);
-            transition: var(--transition-all);
-            margin-bottom: 1.8rem;
-            border: 1px solid rgba(139, 195, 74, 0.2);
-            backdrop-filter: blur(5px);
-            overflow: hidden;
+        .form-select {
+            border: 1px solid var(--deep-green);
         }
         
-        .card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 15px 35px rgba(0, 40, 20, 0.25);
-            border-color: rgba(139, 195, 74, 0.4);
+        .animate-fadeInUp {
+            animation: fadeInUp 0.6s ease forwards;
         }
         
-        .card-header {
-            background: linear-gradient(90deg, var(--dark-green) 0%, var(--medium-green) 100%);
-            color: var(--text-white);
-            border-radius: 16px 16px 0 0 !important;
-            padding: 1.2rem 1.8rem;
-            border-bottom: 1px solid rgba(139, 195, 74, 0.3);
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            gap: 0.8rem;
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        
-        .card-header i {
-            color: var(--yellow-green);
-            font-size: 1.2rem;
-        }
-        
-        .card-body {
-            padding: 1.8rem;
-        }
-        
-        /* Toggle Switch */
-        .form-check {
-            display: flex;
-            align-items: center;
-            padding-left: 0;
-            margin-bottom: 1.5rem;
-        }
-        
-        .form-check-input {
-            width: 48px;
-            height: 24px;
-            margin-right: 0.8rem;
-            background-color: rgba(255, 255, 255, 0.2);
-            border: none;
-            position: relative;
-            transition: var(--transition-all);
-        }
-        
-        .form-check-input:checked {
-            background-color: var(--yellow-green);
-        }
-        
-        .form-check-input:focus {
-            box-shadow: 0 0 0 0.25rem rgba(139, 195, 74, 0.25);
-        }
-        
-        .form-check-label {
-            color: var(--text-white);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 0.8rem;
-        }
-        
-        .form-check-label i {
-            color: var(--yellow-green);
-            font-size: 1.2rem;
-        }
-        
-        /* Slider */
-        .opacity-control {
-            margin-top: 2rem;
-        }
-        
-        .opacity-control label {
-            color: var(--text-white);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 0.8rem;
-            margin-bottom: 1rem;
-        }
-        
-        .opacity-control label i {
-            color: var(--yellow-green);
-            font-size: 1.2rem;
-        }
-        
-        .form-range {
-            height: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            cursor: pointer;
-        }
-        
-        .form-range::-webkit-slider-thumb {
-            width: 20px;
-            height: 20px;
-            background: var(--yellow-green);
-            border: none;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            transition: var(--transition-all);
-        }
-        
-        .form-range::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
-            box-shadow: 0 0 10px var(--yellow-green);
-        }
-        
-        .opacity-value {
-            color: var(--yellow-green);
-            font-weight: 600;
-            text-align: right;
-            margin-top: 0.5rem;
-            font-size: 0.9rem;
-        }
-        
-        /* NDVI Legend */
-        #ndvi-legend {
-            margin-top: 1.5rem;
-        }
-        
-        .legend-gradient {
-            height: 200px;
-            width: 100%;
-            border-radius: 12px;
-            margin-bottom: 1rem;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .legend-gradient::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(to bottom, 
-                #050505 0%, 
-                #dbdbdb 25%, 
-                #ff0000 40%, 
-                #ff9900 60%, 
-                #66e619 80%, 
-                #1a801a 100%);
-        }
-        
-        .legend-labels {
-            display: flex;
-            justify-content: space-between;
-            color: var(--text-white);
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        
-        .legend-label {
-            position: absolute;
-            left: 110%;
-            transform: translateY(-50%);
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        
-        .legend-value {
-            font-weight: 600;
-            color: var(--yellow-green);
-        }
-        
-        .legend-text {
-            font-size: 0.7rem;
-            color: var(--bright-green);
-            margin-top: 2px;
-        }
-        
-        /* Load Button */
-        .btn-ndvi {
-            background: linear-gradient(135deg, var(--yellow-green) 0%, var(--light-green) 100%);
-            color: var(--dark-green);
-            width: 100%;
-            padding: 1rem;
-            font-weight: 600;
-            border: none;
-            border-radius: 12px;
-            transition: var(--transition-all);
-            box-shadow: 0 4px 15px rgba(139, 195, 74, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.8rem;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .btn-ndvi::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-            transition: 0.5s;
-        }
-        
-        .btn-ndvi:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(139, 195, 74, 0.4);
-            color: var(--dark-green);
-        }
-        
-        .btn-ndvi:hover::before {
-            left: 100%;
-        }
-        
-        .btn-ndvi i {
-            font-size: 1.2rem;
-        }
-        
-        /* Map Container */
-        .map-container {
+
+        /* New styles for scrollable column */
+        .scrollable-column {
             height: calc(100vh - 120px);
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: var(--card-shadow);
-            position: relative;
-            border: 1px solid rgba(139, 195, 74, 0.3);
-            transition: var(--transition-all);
+            overflow-y: auto;
+            padding-right: 10px;
         }
-        
-        .map-container:hover {
-            box-shadow: 0 15px 35px rgba(0, 40, 20, 0.25);
-            border-color: rgba(139, 195, 74, 0.5);
+
+        .scrollable-column::-webkit-scrollbar {
+            width: 8px;
         }
-        
-        .value-display {
-            position: absolute;
-            bottom: 25px;
-            right: 25px;
-            background: rgba(26, 77, 46, 0.9);
-            padding: 0.7rem 1.2rem;
+
+        .scrollable-column::-webkit-scrollbar-track {
+            background: #f1f1f1;
             border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            color: var(--text-white);
-            font-weight: 500;
-            border: 1px solid rgba(139, 195, 74, 0.3);
-            backdrop-filter: blur(5px);
-            transition: var(--transition-all);
         }
-        
-        .value-display:hover {
-            background: rgba(26, 77, 46, 1);
-            transform: translateY(-3px);
+
+        .scrollable-column::-webkit-scrollbar-thumb {
+            background: var(--light-green);
+            border-radius: 10px;
         }
-        
-        /* Loading Indicator */
-        .loading-indicator {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(10, 46, 26, 0.8);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-            backdrop-filter: blur(5px);
+
+        .scrollable-column::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-green);
         }
-        
-        .loading-indicator .spinner {
-            width: 60px;
-            height: 60px;
-            border: 5px solid rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            border-top-color: var(--yellow-green);
-            animation: spin 1s ease-in-out infinite;
-            margin-bottom: 1.5rem;
-        }
-        
-        .loading-indicator p {
-            color: var(--text-white);
-            font-weight: 500;
-            font-size: 1.2rem;
-            text-align: center;
-            max-width: 300px;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Responsive Adjustments */
-        @media (max-width: 992px) {
-            .dashboard-header {
-                flex-direction: column;
-                gap: 1.5rem;
-                padding: 1.5rem;
-            }
-            
-            .date-range-container {
-                width: 100%;
-                flex-direction: column;
-            }
-            
-            .dashboard-row {
-                height: auto;
-                flex-direction: column-reverse;
-            }
-            
-            .scrollable-column {
-                height: auto;
-                max-height: 50vh;
-                margin-top: 1.5rem;
-            }
-            
-            .map-container {
-                height: 60vh;
-            }
-        }
-        
-        /* Animation Classes */
-        .animate-pop {
-            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        }
-        
-        @keyframes popIn {
-            0% { transform: scale(0.95); opacity: 0; }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-        
-        .animate-float {
-            animation: float 6s ease-in-out infinite;
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-        
-        /* Pulse Animation */
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(139, 195, 74, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(139, 195, 74, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(139, 195, 74, 0); }
-        }
+
+        /* Adjust row height */
+        .dashboard-row {
+            height: calc(100vh - 120px);
+        }.date-range-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
     </style>
 </head>
 
@@ -727,28 +270,30 @@
         <div class="dashboard-header animate__animated animate__fadeInDown">
             <div class="logo-container">
                 <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="Logo" class="animate__animated animate__fadeInLeft">
-                <h1 class="header-title animate__animated animate__fadeIn">
+                <h1 class="h3 mb-0 animate__animated animate__fadeIn">
                     Farmer: {{ farmer.name }} {{ farmer.surname }}
                 </h1>
             </div>
         
             <div class="date-range-container animate__animated animate__fadeIn">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label for="start-date" class="form-label">Start Date</label>
-                        <input type="date" class="form-control" id="start-date">
+                <div class="date-range-container mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="start-date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start-date" style="border: 1px solid var(--deep-green); border-radius: 6px; padding: 0.5rem;">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="end-date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end-date" style="border: 1px solid var(--deep-green); border-radius: 6px; padding: 0.5rem;">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button id="apply-dates" class="btn btn-primary w-400" style="background-color: var(--deep-green); border: none; border-radius: 8px; padding: 0.8rem;">Apply</button>
+                        </div>
                     </div>
-                    <div class="col-md-4">
-                        <label for="end-date" class="form-label">End Date</label>
-                        <input type="date" class="form-control" id="end-date">
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button id="apply-dates" class="btn btn-primary w-100 glow-on-hover">
-                            <i class="bi bi-calendar-check"></i> Apply
-                        </button>
-                    </div>
-                    <div class="col-12 mt-2">
-                        <div id="selected-period" class="text-center"></div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <div id="selected-period" class="text-muted lg" style="font-weight: bold; color: var(--deep-green); font-size: 1.0rem; text-align: center;"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -765,7 +310,7 @@
             <!-- Left Column - Controls (now scrollable) -->
             <div class="col-md-4 scrollable-column">
                 <!-- Farmer Info Card -->
-                <div class="farmer-info-card animate-pop" data-aos="fade-right">
+                <div class="farmer-info-card animate__animated animate__fadeIn">
                     <h3 class="farmer-name">{{ farmer.name }} {{ farmer.surname }}</h3>
                     
                     <!-- Farm Selector Dropdown -->
@@ -797,48 +342,42 @@
                     <div class="farm-details">
                         <div class="detail-item">
                             <span class="detail-label">Farm Name:</span>
-                            <span id="farm-name" class="detail-value">{{ selected_farm.name }}</span>
+                            <span id="farm-name">{{ selected_farm.name }}</span>
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Location:</span>
-                            <span id="farm-location" class="detail-value">{{ selected_farm.location }}</span>
+                            <span id="farm-location">{{ selected_farm.location }}</span>
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Size:</span>
-                            <span id="farm-size" class="detail-value">{{ selected_farm.size }} hectares</span>
+                            <span id="farm-size">{{ selected_farm.size }} hectares</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Toggle Card -->
-                <div class="card animate-pop" data-aos="fade-right" data-aos-delay="100">
+                <div class="card animate__animated animate__fadeInUp">
                     <div class="card-header">
-                        <i class="bi bi-layers"></i>
-                        <h5 class="card-title mb-0">Layer Controls</h5>
+                        <h5 class="card-title mb-0"><i class="bi bi-layers"></i> Layer Controls</h5>
                     </div>
                     <div class="card-body">
-                        <div class="form-check">
+                        <div class="form-check form-switch mb-3">
                             <input class="form-check-input" type="checkbox" id="toggle-ndvi" checked>
-                            <label class="form-check-label" for="toggle-ndvi">
-                                <i class="bi bi-map"></i> Show NDVI Layer
-                            </label>
+                            <label class="form-check-label" for="toggle-ndvi"><i class="bi bi-map" style="color: var(--deep-green);"></i> Show NDVI Layer</label>
                         </div>
                         <div class="opacity-control">
-                            <label for="opacity-slider" class="form-label">
-                                <i class="bi bi-brightness-high"></i> NDVI Opacity
-                            </label>
+                            <label for="opacity-slider" class="form-label"><i class="bi bi-brightness-high" style="color: var(--deep-green);"></i> NDVI Opacity</label>
                             <input type="range" class="form-range opacity-slider" id="opacity-slider" min="0"
                                 max="1" step="0.1" value="0.6">
-                            <div class="opacity-value">60%</div>
+                            <div class="opacity-value text-end text-muted">60%</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Legend Card -->
-                <div class="card animate-pop" data-aos="fade-right" data-aos-delay="200">
+                <div class="card animate__animated animate__fadeInUp delay-1">
                     <div class="card-header">
-                        <i class="bi bi-palette"></i>
-                        <h5 class="card-title mb-0">NDVI Legend</h5>
+                        <h5 class="card-title mb-0"><i class="bi bi-palette"></i> NDVI Legend</h5>
                     </div>
                     <div class="card-body">
                         <div id="ndvi-legend">
@@ -853,9 +392,9 @@
                 </div>
 
                 <!-- Load Button Card -->
-                <div class="card animate-pop" data-aos="fade-right" data-aos-delay="300">
+                <div class="card animate__animated animate__fadeInUp delay-2">
                     <div class="card-body text-center">
-                        <button id="load-ndvi" class="btn btn-ndvi pulse">
+                        <button id="load-ndvi" class="btn btn-ndvi">
                             <i class="bi bi-cloud-arrow-down"></i> Load NDVI Data
                         </button>
                     </div>
@@ -875,17 +414,9 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- OpenLayers JS -->
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
-    <!-- AOS Animation Library -->
-    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-    
-    <script>
-        // Initialize AOS animation library
-        AOS.init({
-            duration: 800,
-            easing: 'ease-in-out',
-            once: true
-        });
+    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
 
+    <script>
         // Pass Flask variables to JavaScript
         const mapCenter = {{ center| tojson }};
         const geojsonData = {{ geojson| safe }};
@@ -995,11 +526,11 @@
             source: vectorSource,
             style: new ol.style.Style({
                 stroke: new ol.style.Stroke({
-                    color: 'rgba(139, 195, 74, 0.8)',
-                    width: 3
+                    color: 'rgb(0, 255, 123)',
+                    width: 2
                 }),
                 fill: new ol.style.Fill({
-                    color: 'rgba(26, 77, 46, 0.2)'
+                    color: 'rgba(0, 0, 255, 0.1)'
                 })
             }),
             name: 'farm-boundary'
@@ -1051,11 +582,11 @@
                 source: vectorSource,
                 style: new ol.style.Style({
                     stroke: new ol.style.Stroke({
-                        color: 'rgba(139, 195, 74, 0.8)',
-                        width: 3
+                        color: 'rgb(0, 255, 123)',
+                        width: 2
                     }),
                     fill: new ol.style.Fill({
-                        color: 'rgba(26, 77, 46, 0.2)'
+                        color: 'rgba(0, 0, 255, 0.1)'
                     })
                 }),
                 name: 'farm-boundary'
@@ -1396,3 +927,5 @@
     </script>
 </body>
 </html>
+
+
