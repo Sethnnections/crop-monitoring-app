@@ -288,19 +288,25 @@
                             <input type="date" class="form-control" id="end-date" style="border: 1px solid var(--deep-green); border-radius: 6px; padding: 0.5rem;">
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
-                            <button id="apply-dates" class="btn btn-primary w-400" style="background-color: var(--deep-green); border: none; border-radius: 8px; padding: 0.8rem;">Apply</button>
+                            <button id="apply-dates" class="btn btn-primary w-100" style="background-color: var(--deep-green); border: none; border-radius: 8px; padding: 0.8rem;">
+                                <i class="bi bi-check-circle"></i> Apply
+                            </button>
                         </div>
                     </div>
                     <div class="row mt-2">
                         <div class="col-12">
-                            <div id="selected-period" class="text lg" style="font-weight: bold; color: white; font-size: 1.0rem; text-align: center;"></div>
+                            <div class="alert alert-success text-center" style="font-weight: bold; color: white; font-size: 1.2rem; background-color: var(--deep-green); border-radius: 8px; padding: 1rem; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);">
+                                <i class="bi bi-calendar-check" style="margin-right: 8px;"></i>
+                                <span id="selected-period"></span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         
             <div class="user-info">
-                <button class="logout-btn animate__animated animate__fadeIn">
+                <button class="logout-btn animate__animated animate__fadeIn" 
+                        style="background-color: var(--deep-green); border: none; border-radius: 8px; margin: 2rem;">
                     <i class="bi bi-box-arrow-right"></i> Logout
                 </button>
             </div>
