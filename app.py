@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from flask import Flask, render_template, jsonify, request
 from config import Config
 import json
@@ -318,6 +318,230 @@ function isCloud(samples){
     except Exception as e:
         logger.exception("Error processing NDVI request")
         return jsonify({'status': 'error', 'message': str(e)})
+    
+    # [Previous imports remain the same...]
+
+@app.route('/get-fire-detection', methods=['POST'])
+def get_fire_detection():
+    try:
+        geojson_data = request.json
+        logger.info("Received fire detection request")
+
+        # Extract optional date parameters
+        start_date = request.args.get('start_date') or geojson_data.get('start_date')
+        end_date = request.args.get('end_date') or geojson_data.get('end_date')
+
+        # Default to last 7 days if not specified
+        if not start_date or not end_date:
+            end_date = datetime.utcnow().isoformat()
+            start_date = (datetime.utcnow() - timedelta(days=7)).isoformat()
+
+        time_interval = (start_date, end_date)
+        logger.info(f"Using time interval: {time_interval}")
+
+        # Validate and process the GeoJSON
+        validate_geojson(geojson_data)
+        geometry = get_geometry_from_geojson(geojson_data)
+        bbox = get_geojson_bbox(geojson_data)
+
+        resolution = 20  # Lower resolution for fire detection
+        size = bbox_to_dimensions(bbox, resolution=resolution)
+
+        config = SHConfig()
+        config.sh_client_id = app.config['SH_CLIENT_ID']
+        config.sh_client_secret = app.config['SH_CLIENT_SECRET']
+        config.instance_id = app.config['SH_INSTANCE_ID']
+
+        evalscript = """
+//VERSION=3
+function setup() {
+    return {
+        input: ["B04", "B08", "B11", "B12", "dataMask"],
+        output: [
+            { id: "default", bands: 4 },
+            { id: "fireMask", bands: 1, sampleType: "FLOAT32" }
+        ]
+    };
+}
+
+function evaluatePixel(samples) {
+    // Normalized Burn Ratio (NBR) for fire detection
+    const nbr = (samples.B08 - samples.B11) / (samples.B08 + samples.B11 + 1e-8);
+    
+    // SWIR/NIR ratio for active fire detection
+    const swirnir = samples.B11 / samples.B08;
+    
+    // Thermal anomaly detection
+    const thermalAnomaly = samples.B12 > 0.3 ? 1 : 0;
+    
+    // Fire probability (combining multiple indices)
+    const fireProb = (swirnir > 1.5 ? 0.6 : 0) + 
+                    (nbr < 0.1 ? 0.3 : 0) + 
+                    (thermalAnomaly * 0.1);
+    
+    // Apply data mask
+    const fireValue = samples.dataMask === 1 ? fireProb : 0;
+    
+    // Visualization
+    let imgVals;
+    if (fireProb > 0.7) {
+        imgVals = [1, 0, 0, samples.dataMask];  // Red for high probability
+    } else if (fireProb > 0.4) {
+        imgVals = [1, 0.65, 0, samples.dataMask];  // Orange for medium probability
+    } else if (fireProb > 0.1) {
+        imgVals = [1, 1, 0, samples.dataMask];  // Yellow for low probability
+    } else {
+        imgVals = [0.2, 0.2, 0.2, samples.dataMask];  // Dark for no fire
+    }
+    
+    return {
+        default: imgVals,
+        fireMask: [fireValue]
+    };
+}
+"""
+
+        request_sh = SentinelHubRequest(
+            evalscript=evalscript,
+            input_data=[
+                SentinelHubRequest.input_data(
+                    data_collection=DataCollection.SENTINEL2_L2A,
+                    time_interval=time_interval,
+                    mosaicking_order='leastCC'
+                )
+            ],
+            responses=[
+                SentinelHubRequest.output_response('default', MimeType.PNG),
+                SentinelHubRequest.output_response('fireMask', MimeType.JSON)
+            ],
+            geometry=geometry,
+            size=size,
+            config=config
+        )
+
+        data = request_sh.get_data()
+        if data:
+            logger.info("Fire detection data retrieved successfully.")
+            return jsonify({
+                'status': 'success',
+                'image': data[0].tolist(),
+                'fire_mask': data[1]['fireMask'] if len(data) > 1 else None
+            })
+        else:
+            logger.warning("No data available for fire detection.")
+            return jsonify({'status': 'error', 'message': 'No data available for fire detection'})
+
+    except Exception as e:
+        logger.exception("Error processing fire detection request")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/get-flood-detection', methods=['POST'])
+def get_flood_detection():
+    try:
+        geojson_data = request.json
+        logger.info("Received flood detection request")
+
+        # Extract optional date parameters
+        start_date = request.args.get('start_date') or geojson_data.get('start_date')
+        end_date = request.args.get('end_date') or geojson_data.get('end_date')
+
+        # Default to last 30 days if not specified
+        if not start_date or not end_date:
+            end_date = datetime.utcnow().isoformat()
+            start_date = (datetime.utcnow() - timedelta(days=30)).isoformat()
+
+        time_interval = (start_date, end_date)
+        logger.info(f"Using time interval: {time_interval}")
+
+        # Validate and process the GeoJSON
+        validate_geojson(geojson_data)
+        geometry = get_geometry_from_geojson(geojson_data)
+        bbox = get_geojson_bbox(geojson_data)
+
+        resolution = 10
+        size = bbox_to_dimensions(bbox, resolution=resolution)
+
+        config = SHConfig()
+        config.sh_client_id = app.config['SH_CLIENT_ID']
+        config.sh_client_secret = app.config['SH_CLIENT_SECRET']
+        config.instance_id = app.config['SH_INSTANCE_ID']
+
+        evalscript = """
+//VERSION=3
+function setup() {
+    return {
+        input: ["B03", "B08", "B11", "B12", "dataMask"],
+        output: [
+            { id: "default", bands: 4 },
+            { id: "waterMask", bands: 1, sampleType: "FLOAT32" }
+        ]
+    };
+}
+
+function evaluatePixel(samples) {
+    // Modified Normalized Difference Water Index (MNDWI)
+    const mndwi = (samples.B03 - samples.B11) / (samples.B03 + samples.B11 + 1e-8);
+    
+    // Water probability
+    const waterProb = (mndwi > 0.1 ? 0.7 : 0) + 
+                     (samples.B03 < 0.2 ? 0.3 : 0);
+    
+    // Apply data mask
+    const waterValue = samples.dataMask === 1 ? waterProb : 0;
+    
+    // Visualization
+    let imgVals;
+    if (waterProb > 0.7) {
+        imgVals = [0, 0, 1, samples.dataMask];  // Blue for high probability
+    } else if (waterProb > 0.4) {
+        imgVals = [0, 0.5, 1, samples.dataMask];  // Light blue for medium probability
+    } else if (waterProb > 0.1) {
+        imgVals = [0.8, 0.9, 1, samples.dataMask];  // Very light blue for low probability
+    } else {
+        imgVals = [0.2, 0.2, 0.2, samples.dataMask];  // Dark for no water
+    }
+    
+    return {
+        default: imgVals,
+        waterMask: [waterValue]
+    };
+}
+"""
+
+        request_sh = SentinelHubRequest(
+            evalscript=evalscript,
+            input_data=[
+                SentinelHubRequest.input_data(
+                    data_collection=DataCollection.SENTINEL2_L2A,
+                    time_interval=time_interval,
+                    mosaicking_order='leastCC'
+                )
+            ],
+            responses=[
+                SentinelHubRequest.output_response('default', MimeType.PNG),
+                SentinelHubRequest.output_response('waterMask', MimeType.JSON)
+            ],
+            geometry=geometry,
+            size=size,
+            config=config
+        )
+
+        data = request_sh.get_data()
+        if data:
+            logger.info("Flood detection data retrieved successfully.")
+            return jsonify({
+                'status': 'success',
+                'image': data[0].tolist(),
+                'water_mask': data[1]['waterMask'] if len(data) > 1 else None
+            })
+        else:
+            logger.warning("No data available for flood detection.")
+            return jsonify({'status': 'error', 'message': 'No data available for flood detection'})
+
+    except Exception as e:
+        logger.exception("Error processing flood detection request")
+        return jsonify({'status': 'error', 'message': str(e)})
+
   
 
 if __name__ == '__main__':
