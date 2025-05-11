@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flood Monitoring</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol/ol.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        #legend {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid #333;
+        }
+        #date-controls {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div id="controls">
+        <h3>Flood Monitoring</h3>
+        <div id="date-controls">
+            <label for="start-date">Start Date:</label>
+            <input type="date" id="start-date">
+            <label for="end-date">End Date:</label>
+            <input type="date" id="end-date">
+            <button id="update-btn">Update Map</button>
+        </div>
+        <button id="recent-btn">Show Recent Floods</button>
+    </div>
+    
+    <div id="legend">
+        <h4>Flood Probability</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: blue;"></div>
+            <span>High (>70%)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #0077ff;"></div>
+            <span>Medium (40-70%)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #aad3ff;"></div>
+            <span>Low (10-40%)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #333;"></div>
+            <span>No Flood</span>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol/ol.js"></script>
+    <script>
+        // Get the farm boundary from the backend
+        const farmerId = new URLSearchParams(window.location.search).get('farmer_id');
+        const farmId = new URLSearchParams(window.location.search).get('farm_id');
+        let farmBoundary = null;
+        
+        // Default map center (will be updated after loading farm boundary)
+        let mapCenter = [0, 0];
+        
+        // Initialize map
+        const map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.XYZ({
+                        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                        attributions: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                    })
+                })
+            ],
+            view: new ol.View({
+                center: ol.proj.fromLonLat([mapCenter[1], mapCenter[0]]),
+                zoom: 12
+            })
+        });
+        
+        // Vector layer for flood data
+        const floodLayer = new ol.layer.Vector({
+            source: new ol.source.Vector(),
+            style: function(feature) {
+                const waterProb = feature.get('waterProb');
+                let color;
+                
+                if (waterProb > 0.7) {
+                    color = [0, 0, 255, 0.7]; // Blue
+                } else if (waterProb > 0.4) {
+                    color = [0, 119, 255, 0.7]; // Light blue
+                } else if (waterProb > 0.1) {
+                    color = [170, 211, 255, 0.7]; // Very light blue
+                } else {
+                    color = [51, 51, 51, 0.3]; // Dark gray
+                }
+                
+                return new ol.style.Style({
+                    fill: new ol.style.Fill({ color: color }),
+                    stroke: new ol.style.Stroke({
+                        color: [0, 0, 0, 0.8],
+                        width: 1
+                    })
+                });
+            }
+        });
+        map.addLayer(floodLayer);
+        
+        // Farm boundary layer
+        const boundaryLayer = new ol.layer.Vector({
+            source: new ol.source.Vector(),
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: [0, 255, 0, 1],
+                    width: 2
+                }),
+                fill: new ol.style.Fill({
+                    color: [0, 255, 0, 0.1]
+                })
+            })
+        });
+        map.addLayer(boundaryLayer);
+        
+        // Load farm boundary and initialize map
+        async function initializeMap() {
+            try {
+                // Fetch farm boundary from your backend
+                const response = await fetch(`/api/farmers/${farmerId}/farms/${farmId}`);
+                const data = await response.json();
+                farmBoundary = data.boundary;
+                
+                // Convert GeoJSON to OpenLayers feature
+                const format = new ol.format.GeoJSON();
+                const features = format.readFeatures(farmBoundary);
+                boundaryLayer.getSource().addFeatures(features);
+                
+                // Set map view to the farm boundary
+                const extent = boundaryLayer.getSource().getExtent();
+                map.getView().fit(extent, { padding: [50, 50, 50, 50] });
+                
+                // Get centroid for map center
+                const centroid = ol.extent.getCenter(extent);
+                mapCenter = ol.proj.toLonLat(centroid);
+                
+                // Set default dates (last 30 days)
+                const endDate = new Date();
+                const startDate = new Date();
+                startDate.setDate(endDate.getDate() - 30);
+                
+                document.getElementById('start-date').valueAsDate = startDate;
+                document.getElementById('end-date').valueAsDate = endDate;
+                
+                // Load initial flood data
+                loadFloodData(startDate, endDate);
+                
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                alert('Failed to load farm data. Please try again.');
+            }
+        }
+        
+        // Load flood data from your backend
+        async function loadFloodData(startDate, endDate) {
+            try {
+                // Clear existing flood data
+                floodLayer.getSource().clear();
+                
+                // Show loading state
+                const loadingMsg = document.createElement('div');
+                loadingMsg.textContent = 'Loading flood data...';
+                loadingMsg.style.position = 'absolute';
+                loadingMsg.style.top = '50%';
+                loadingMsg.style.left = '50%';
+                loadingMsg.style.transform = 'translate(-50%, -50%)';
+                loadingMsg.style.backgroundColor = 'white';
+                loadingMsg.style.padding = '10px';
+                loadingMsg.style.borderRadius = '5px';
+                loadingMsg.style.zIndex = '1000';
+                document.body.appendChild(loadingMsg);
+                
+                // Format dates for API
+                const startDateStr = startDate.toISOString().split('T')[0];
+                const endDateStr = endDate.toISOString().split('T')[0];
+                
+                // Call your backend endpoint
+                const response = await fetch('/get-flood-detection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ...farmBoundary,
+                        start_date: startDateStr,
+                        end_date: endDateStr
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Remove loading message
+                document.body.removeChild(loadingMsg);
+                
+                if (data.status === 'success') {
+                    // Process flood data and add to map
+                    const format = new ol.format.GeoJSON();
+                    const floodFeatures = format.readFeatures({
+                        type: 'FeatureCollection',
+                        features: data.water_mask.map(waterArea => ({
+                            type: 'Feature',
+                            geometry: waterArea.geometry,
+                            properties: {
+                                waterProb: waterArea.probability
+                            }
+                        }))
+                    });
+                    
+                    floodLayer.getSource().addFeatures(floodFeatures);
+                    
+                    // Zoom to show all flood areas if any
+                    if (floodFeatures.length > 0) {
+                        const extent = floodLayer.getSource().getExtent();
+                        map.getView().fit(extent, { padding: [50, 50, 50, 50] });
+                    }
+                } else {
+                    alert('No flood data available for the selected period.');
+                }
+            } catch (error) {
+                console.error('Error loading flood data:', error);
+                alert('Failed to load flood data. Please try again.');
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('update-btn').addEventListener('click', () => {
+            const startDate = new Date(document.getElementById('start-date').value);
+            const endDate = new Date(document.getElementById('end-date').value);
+            loadFloodData(startDate, endDate);
+        });
+        
+        document.getElementById('recent-btn').addEventListener('click', () => {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 7); // Last 7 days
+            
+            document.getElementById('start-date').valueAsDate = startDate;
+            document.getElementById('end-date').valueAsDate = endDate;
+            
+            loadFloodData(startDate, endDate);
+        });
+        
+        // Initialize the map when page loads
+        initializeMap();
+    </script>
+</body>
+</html>
