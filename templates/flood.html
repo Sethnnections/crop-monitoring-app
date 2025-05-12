@@ -1,290 +1,322 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flood Monitoring</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol/ol.css">
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            font-family: Arial, sans-serif;
-        }
-        #map {
-            width: 100%;
-            height: 100%;
-        }
-        #controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 1000;
-        }
-        #legend {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 1000;
-        }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin: 5px 0;
-        }
-        .legend-color {
-            width: 20px;
-            height: 20px;
-            margin-right: 10px;
-            border: 1px solid #333;
-        }
-        #date-controls {
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
-<body>
-    <div id="map"></div>
-    
-    <div id="controls">
-        <h3>Flood Monitoring</h3>
-        <div id="date-controls">
-            <label for="start-date">Start Date:</label>
-            <input type="date" id="start-date">
-            <label for="end-date">End Date:</label>
-            <input type="date" id="end-date">
-            <button id="update-btn">Update Map</button>
-        </div>
-        <button id="recent-btn">Show Recent Floods</button>
-    </div>
-    
-    <div id="legend">
-        <h4>Flood Probability</h4>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: blue;"></div>
-            <span>High (>70%)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #0077ff;"></div>
-            <span>Medium (40-70%)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #aad3ff;"></div>
-            <span>Low (10-40%)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #333;"></div>
-            <span>No Flood</span>
-        </div>
-    </div>
+{% extends "base.html" %}
 
-    <script src="https://cdn.jsdelivr.net/npm/ol/ol.js"></script>
-    <script>
-        // Get the farm boundary from the backend
-        const farmerId = new URLSearchParams(window.location.search).get('farmer_id');
-        const farmId = new URLSearchParams(window.location.search).get('farm_id');
-        let farmBoundary = null;
+{% block title %}Flood Monitoring - {{ farmer.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2 sidebar">
+            <h3>{{ farmer.name }}</h3>
+            <p>{{ farmer.location }}</p>
+            
+            <h4>Farms</h4>
+            <div class="list-group">
+                {% for farm in farms %}
+                <a href="#" class="list-group-item list-group-item-action farm-item" 
+                   data-farm-id="{{ farm.id }}" data-farm-name="{{ farm.name }}"
+                   data-geojson='{{ farm.boundary|tojson }}'>
+                    {{ farm.name }}
+                    <small class="d-block text-muted">{{ farm.size }} hectares</small>
+                </a>
+                {% endfor %}
+            </div>
+
+            <div class="mt-4">
+                <h4>Date Range</h4>
+                <div class="form-group">
+                    <label for="start-date">Start Date:</label>
+                    <input type="date" id="start-date" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="end-date">End Date:</label>
+                    <input type="date" id="end-date" class="form-control">
+                </div>
+                <button id="update-flood-data" class="btn btn-primary mt-2">Update Flood Data</button>
+            </div>
+            
+            <div class="mt-4">
+                <h4>Water Detection Legend</h4>
+                <div class="legend-item">
+                    <div class="color-box" style="background-color: rgba(50, 50, 50, 0.8);"></div>
+                    <span>No Water</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background-color: rgba(204, 229, 255, 0.8);"></div>
+                    <span>Low Probability</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background-color: rgba(0, 128, 255, 0.8);"></div>
+                    <span>Medium Probability</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background-color: rgba(0, 0, 255, 0.8);"></div>
+                    <span>High Probability</span>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <h4>Analysis</h4>
+                <div id="flood-analysis-results" class="analysis-results">
+                    <p>Select a farm and date range to view flood analysis.</p>
+                </div>
+            </div>
+        </div>
         
-        // Default map center (will be updated after loading farm boundary)
-        let mapCenter = [0, 0];
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10 ml-sm-auto content-area">
+            <div class="map-container">
+                <div id="map"></div>
+                <div id="loading-overlay" class="d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize map
+    var map = L.map('map').setView({{ center }}, 13);
+    
+    // Add base layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    
+    // Initial GeoJSON
+    var geojsonData = {{ geojson|safe }};
+    var farmLayer = L.geoJSON(geojsonData, {
+        style: {
+            color: '#0563bb',
+            weight: 2,
+            fillOpacity: 0.1
+        }
+    }).addTo(map);
+    
+    // Initialize flood overlay layer
+    var floodOverlay = L.imageOverlay('', [[0,0], [0,0]], {
+        opacity: 0.7
+    });
+    
+    // Function to set date inputs to default values
+    function setDefaultDates() {
+        const today = new Date();
+        const monthAgo = new Date();
+        monthAgo.setDate(today.getDate() - 30);
         
-        // Initialize map
-        const map = new ol.Map({
-            target: 'map',
-            layers: [
-                new ol.layer.Tile({
-                    source: new ol.source.XYZ({
-                        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                        attributions: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-                    })
-                })
-            ],
-            view: new ol.View({
-                center: ol.proj.fromLonLat([mapCenter[1], mapCenter[0]]),
-                zoom: 12
-            })
-        });
+        document.getElementById('end-date').valueAsDate = today;
+        document.getElementById('start-date').valueAsDate = monthAgo;
+    }
+    
+    // Function to fetch flood detection data
+    function fetchFloodData() {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
         
-        // Vector layer for flood data
-        const floodLayer = new ol.layer.Vector({
-            source: new ol.source.Vector(),
-            style: function(feature) {
-                const waterProb = feature.get('waterProb');
-                let color;
-                
-                if (waterProb > 0.7) {
-                    color = [0, 0, 255, 0.7]; // Blue
-                } else if (waterProb > 0.4) {
-                    color = [0, 119, 255, 0.7]; // Light blue
-                } else if (waterProb > 0.1) {
-                    color = [170, 211, 255, 0.7]; // Very light blue
-                } else {
-                    color = [51, 51, 51, 0.3]; // Dark gray
-                }
-                
-                return new ol.style.Style({
-                    fill: new ol.style.Fill({ color: color }),
-                    stroke: new ol.style.Stroke({
-                        color: [0, 0, 0, 0.8],
-                        width: 1
-                    })
-                });
-            }
-        });
-        map.addLayer(floodLayer);
-        
-        // Farm boundary layer
-        const boundaryLayer = new ol.layer.Vector({
-            source: new ol.source.Vector(),
-            style: new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: [0, 255, 0, 1],
-                    width: 2
-                }),
-                fill: new ol.style.Fill({
-                    color: [0, 255, 0, 0.1]
-                })
-            })
-        });
-        map.addLayer(boundaryLayer);
-        
-        // Load farm boundary and initialize map
-        async function initializeMap() {
-            try {
-                // Fetch farm boundary from your backend
-                const response = await fetch(`/api/farmers/${farmerId}/farms/${farmId}`);
-                const data = await response.json();
-                farmBoundary = data.boundary;
-                
-                // Convert GeoJSON to OpenLayers feature
-                const format = new ol.format.GeoJSON();
-                const features = format.readFeatures(farmBoundary);
-                boundaryLayer.getSource().addFeatures(features);
-                
-                // Set map view to the farm boundary
-                const extent = boundaryLayer.getSource().getExtent();
-                map.getView().fit(extent, { padding: [50, 50, 50, 50] });
-                
-                // Get centroid for map center
-                const centroid = ol.extent.getCenter(extent);
-                mapCenter = ol.proj.toLonLat(centroid);
-                
-                // Set default dates (last 30 days)
-                const endDate = new Date();
-                const startDate = new Date();
-                startDate.setDate(endDate.getDate() - 30);
-                
-                document.getElementById('start-date').valueAsDate = startDate;
-                document.getElementById('end-date').valueAsDate = endDate;
-                
-                // Load initial flood data
-                loadFloodData(startDate, endDate);
-                
-            } catch (error) {
-                console.error('Error initializing map:', error);
-                alert('Failed to load farm data. Please try again.');
-            }
+        if (!startDate || !endDate) {
+            alert('Please select both start and end dates');
+            return;
         }
         
-        // Load flood data from your backend
-        async function loadFloodData(startDate, endDate) {
-            try {
-                // Clear existing flood data
-                floodLayer.getSource().clear();
-                
-                // Show loading state
-                const loadingMsg = document.createElement('div');
-                loadingMsg.textContent = 'Loading flood data...';
-                loadingMsg.style.position = 'absolute';
-                loadingMsg.style.top = '50%';
-                loadingMsg.style.left = '50%';
-                loadingMsg.style.transform = 'translate(-50%, -50%)';
-                loadingMsg.style.backgroundColor = 'white';
-                loadingMsg.style.padding = '10px';
-                loadingMsg.style.borderRadius = '5px';
-                loadingMsg.style.zIndex = '1000';
-                document.body.appendChild(loadingMsg);
-                
-                // Format dates for API
-                const startDateStr = startDate.toISOString().split('T')[0];
-                const endDateStr = endDate.toISOString().split('T')[0];
-                
-                // Call your backend endpoint
-                const response = await fetch('/get-flood-detection', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
+        // Show loading indicator
+        document.getElementById('loading-overlay').classList.remove('d-none');
+        
+        // Prepare the farm boundary for API request
+        const currentFarm = document.querySelector('.farm-item.active');
+        if (!currentFarm) {
+            alert('Please select a farm first');
+            document.getElementById('loading-overlay').classList.add('d-none');
+            return;
+        }
+        
+        const geojsonString = currentFarm.getAttribute('data-geojson');
+        let farmGeojson;
+        try {
+            farmGeojson = JSON.parse(geojsonString);
+        } catch (e) {
+            console.error('Error parsing farm GeoJSON:', e);
+            alert('Error loading farm data');
+            document.getElementById('loading-overlay').classList.add('d-none');
+            return;
+        }
+        
+        // Create GeoJSON feature collection
+        const requestBody = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "name": currentFarm.getAttribute('data-farm-name')
                     },
-                    body: JSON.stringify({
-                        ...farmBoundary,
-                        start_date: startDateStr,
-                        end_date: endDateStr
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // Remove loading message
-                document.body.removeChild(loadingMsg);
-                
-                if (data.status === 'success') {
-                    // Process flood data and add to map
-                    const format = new ol.format.GeoJSON();
-                    const floodFeatures = format.readFeatures({
-                        type: 'FeatureCollection',
-                        features: data.water_mask.map(waterArea => ({
-                            type: 'Feature',
-                            geometry: waterArea.geometry,
-                            properties: {
-                                waterProb: waterArea.probability
-                            }
-                        }))
-                    });
-                    
-                    floodLayer.getSource().addFeatures(floodFeatures);
-                    
-                    // Zoom to show all flood areas if any
-                    if (floodFeatures.length > 0) {
-                        const extent = floodLayer.getSource().getExtent();
-                        map.getView().fit(extent, { padding: [50, 50, 50, 50] });
-                    }
-                } else {
-                    alert('No flood data available for the selected period.');
+                    "geometry": farmGeojson
                 }
-            } catch (error) {
-                console.error('Error loading flood data:', error);
-                alert('Failed to load flood data. Please try again.');
+            ],
+            "start_date": startDate,
+            "end_date": endDate
+        };
+        
+        // Send API request
+        fetch('/get-flood-detection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('loading-overlay').classList.add('d-none');
+            
+            if (data.status === 'error') {
+                alert('Error: ' + data.message);
+                return;
             }
+            
+            if (data.image) {
+                displayFloodOverlay(data.image, farmGeojson);
+            }
+            
+            if (data.water_mask) {
+                analyzeFloodData(data.water_mask);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching flood data:', error);
+            document.getElementById('loading-overlay').classList.add('d-none');
+            alert('Error fetching flood detection data');
+        });
+    }
+    
+    // Function to display flood overlay on map
+    function displayFloodOverlay(imageData, farmGeojson) {
+        // Remove existing overlay
+        if (map.hasLayer(floodOverlay)) {
+            map.removeLayer(floodOverlay);
         }
         
-        // Event listeners
-        document.getElementById('update-btn').addEventListener('click', () => {
-            const startDate = new Date(document.getElementById('start-date').value);
-            const endDate = new Date(document.getElementById('end-date').value);
-            loadFloodData(startDate, endDate);
-        });
+        // Convert image data to base64
+        const uint8Array = new Uint8Array(imageData);
+        const blob = new Blob([uint8Array], { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
         
-        document.getElementById('recent-btn').addEventListener('click', () => {
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setDate(endDate.getDate() - 7); // Last 7 days
-            
-            document.getElementById('start-date').valueAsDate = startDate;
-            document.getElementById('end-date').valueAsDate = endDate;
-            
-            loadFloodData(startDate, endDate);
-        });
+        // Calculate bounds from GeoJSON
+        const bounds = L.geoJSON(farmGeojson).getBounds();
         
-        // Initialize the map when page loads
-        initializeMap();
-    </script>
-</body>
-</html>
+        // Create new overlay
+        floodOverlay = L.imageOverlay(url, bounds, {
+            opacity: 0.7
+        }).addTo(map);
+        
+        // Fit map to bounds
+        map.fitBounds(bounds);
+    }
+    
+    // Function to analyze flood data
+    function analyzeFloodData(waterMask) {
+        // Calculate water statistics
+        const validValues = waterMask.filter(value => !isNaN(value));
+        
+        if (validValues.length === 0) {
+            document.getElementById('flood-analysis-results').innerHTML = 
+                '<p>No valid water data available for the selected area and time period.</p>';
+            return;
+        }
+        
+        // Count pixels in each category
+        const noWater = validValues.filter(value => value <= 0.1).length;
+        const lowWater = validValues.filter(value => value > 0.1 && value <= 0.4).length;
+        const mediumWater = validValues.filter(value => value > 0.4 && value <= 0.7).length;
+        const highWater = validValues.filter(value => value > 0.7).length;
+        const totalPixels = validValues.length;
+        
+        // Calculate percentages
+        const noWaterPercent = ((noWater / totalPixels) * 100).toFixed(1);
+        const lowWaterPercent = ((lowWater / totalPixels) * 100).toFixed(1);
+        const mediumWaterPercent = ((mediumWater / totalPixels) * 100).toFixed(1);
+        const highWaterPercent = ((highWater / totalPixels) * 100).toFixed(1);
+        
+        // Determine flood risk
+        let floodStatus = 'Normal';
+        if (highWater > totalPixels * 0.05) {
+            floodStatus = 'Severe Flooding';
+        } else if (highWater > 0 || mediumWater > totalPixels * 0.1) {
+            floodStatus = 'Moderate Flooding';
+        } else if (mediumWater > 0 || lowWater > totalPixels * 0.2) {
+            floodStatus = 'Minor Flooding';
+        }
+        
+        document.getElementById('flood-analysis-results').innerHTML = `
+            <p><strong>Water Status: ${floodStatus}</strong></p>
+            <p>No Water: ${noWaterPercent}%</p>
+            <p>Low Coverage: ${lowWaterPercent}%</p>
+            <p>Medium Coverage: ${mediumWaterPercent}%</p>
+            <p>High Coverage: ${highWaterPercent}%</p>
+            <p>Last Updated: ${new Date().toLocaleString()}</p>
+        `;
+    }
+    
+    // Add event listeners to farm items
+    document.querySelectorAll('.farm-item').forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Update active state
+            document.querySelectorAll('.farm-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Get farm geometry
+            const geojsonString = this.getAttribute('data-geojson');
+            let farmGeojson;
+            try {
+                farmGeojson = JSON.parse(geojsonString);
+            } catch (e) {
+                console.error('Error parsing farm GeoJSON:', e);
+                return;
+            }
+            
+            // Update map
+            if (map.hasLayer(farmLayer)) {
+                map.removeLayer(farmLayer);
+            }
+            
+            farmLayer = L.geoJSON({
+                type: "Feature",
+                properties: {},
+                geometry: farmGeojson
+            }, {
+                style: {
+                    color: '#0563bb',
+                    weight: 2,
+                    fillOpacity: 0.1
+                }
+            }).addTo(map);
+            
+            map.fitBounds(farmLayer.getBounds());
+            
+            // Clear existing flood overlay
+            if (map.hasLayer(floodOverlay)) {
+                map.removeLayer(floodOverlay);
+            }
+            
+            // Reset analysis results
+            document.getElementById('flood-analysis-results').innerHTML = 
+                '<p>Click "Update Flood Data" to view analysis.</p>';
+        });
+    });
+    
+    // Add event listener to update button
+    document.getElementById('update-flood-data').addEventListener('click', fetchFloodData);
+    
+    // Initialize with first farm selected
+    document.querySelector('.farm-item').classList.add('active');
+    
+    // Set default dates
+    setDefaultDates();
+</script>
+{% endblock %}
