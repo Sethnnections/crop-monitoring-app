@@ -100,6 +100,17 @@ def calculate_mndwi(green, swir):
     mndwi = (green - swir) / (green + swir + 1e-8)
     return mndwi.tolist()
 
+def calculate_risk_level(water_coverage):
+    """Determine flood risk level based on water coverage percentage"""
+    if water_coverage > 30:
+        return 'High'
+    elif water_coverage > 15:
+        return 'Medium'
+    elif water_coverage > 5:
+        return 'Low'
+    else:
+        return 'Normal'
+
 def validate_geojson(geojson_data):
     """Validate and normalize GeoJSON structure"""
     if not isinstance(geojson_data, dict):
@@ -510,15 +521,13 @@ function evaluatePixel(samples) {
                 'status': 'success',
                 'image': image_data.tolist(),
                 'water_coverage': round(water_coverage, 2),
-                'risk_level': 12
-            })
+                'risk_level': calculate_risk_level(water_coverage)})
 
             return jsonify({
                 'status': 'success',
                 'image': image_data.tolist(),
                 'water_coverage': round(water_coverage, 2),
-                'risk_level': 12
-            })
+                'risk_level': calculate_risk_level(water_coverage)})
         
         else:
             logger.warning("No data available for the selected time range")
