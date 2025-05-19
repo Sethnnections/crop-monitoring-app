@@ -555,6 +555,8 @@
                 if (!response.ok) throw new Error('Failed to get flood analysis');
                 
                 const data = await response.json();
+
+                console.log('Flood analysis data:', data);
                 
                 if (data.status !== 'success') {
                     throw new Error(data.message || 'Failed to process flood data');
@@ -666,13 +668,13 @@
             let actualRiskLevel = riskLevel;
             if (!actualRiskLevel) {
                 if (coverage > 30) {
-                    actualRiskLevel = 'High';
+                    actualRiskLevel = 'high';
                 } else if (coverage > 15) {
-                    actualRiskLevel = 'Medium';
+                    actualRiskLevel = 'medium';
                 } else if (coverage > 5) {
-                    actualRiskLevel = 'Low';
+                    actualRiskLevel = 'low';
                 } else {
-                    actualRiskLevel = 'Normal';
+                    actualRiskLevel = 'normal';
                 }
             }
             
@@ -680,7 +682,7 @@
             let iconClass = 'fa-check-circle';
             let description = '';
             
-            switch (actualRiskLevel.toLowerCase()) {
+            switch (actualRiskLevel) {
                 case 'high':
                     riskElement.classList.add('risk-high');
                     iconClass = 'fa-exclamation-triangle';
@@ -714,7 +716,7 @@
             icon.className = `fas ${iconClass} fa-2x me-3`;
             
             // Show appropriate alert for high risk
-            if (actualRiskLevel.toLowerCase() === 'high') {
+            if (actualRiskLevel === 'high') {
                 Swal.fire({
                     icon: 'warning',
                     title: 'High Flood Risk Detected!',
