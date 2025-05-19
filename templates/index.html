@@ -316,7 +316,7 @@
         
             <div class="user-info">
                 <button class="logout-btn animate__animated animate__fadeIn">
-                    <i class="bi bi-box-arrow-right"></i> Logout
+                    <i class="bi bi-arrow-left"></i> Back
                 </button>
             </div>
         </div>
@@ -431,7 +431,8 @@
     <!-- OpenLayers JS -->
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
-
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         // Pass Flask variables to JavaScript
         const mapCenter = {{ center| tojson }};
@@ -929,10 +930,18 @@
 
         // Logout button functionality
         document.querySelector('.logout-btn').addEventListener('click', function() {
-            if (confirm('Are you sure you want to logout?')) {
-                // Add logout functionality here
-                window.location.href = '/logout';
-            }
+            Swal.fire({
+                title: 'Are you sure you want to go back?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, go back!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.history.back();
+                }
+            });
         });
 
         // Apply dates button functionality
