@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farm Flood Risk Monitoring</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <style>
+        :root {
+            --deep-green: #1a4d2e;
+            --light-green: #4f9d69;
+            --accent-green: #3a7d44;
+            --background-light: #f5f9f6;
+        }
+        
+        body {
+            background: url("{{ url_for('static', filename='img/im.jpg') }}") no-repeat center center fixed;
+            background-size: cover;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            padding: 0rem;
+            color: white;
+            margin: 0rem;
+            font-family: 'Arial', sans-serif;
+            transition: all 0.3s ease;
+        }
+        
+        #header {
+            background-color: var(--deep-green);
+            color: white;
+            padding: 15px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            position: relative;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+        
+        #header:hover {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        #map-container {
+            height: 70vh;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        #map-container:hover {
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+        
+        #map {
+            height: 100%;
+            z-index: 1;
+        }
+        
+        .sidebar {
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            height: 100%;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            color: var(--deep-green);
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .sidebar:hover {
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            transform: translateY(-2px);
+        }
+        
+        .risk-indicator {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            color: var(--deep-green);
+            font-weight: bold;
+            transition: all 0.3s ease;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .risk-high {
+            background-color: #e74c3c;
+        }
+        
+        .risk-medium {
+            background-color: #f39c12;
+        }
+        
+        .risk-low {
+            background-color: #f1c40f;
+        }
+        
+        .risk-normal {
+            background-color: var(--accent-green);
+        }
+        
+        .date-controls {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        
+        .legend {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+            line-height: 1.5;
+            font-size: 14px;
+            color: #333;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        
+        .legend i {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            margin-right: 8px;
+            vertical-align: middle;
+            border-radius: 3px;
+            transition: all 0.3s ease;
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            border-radius: 8px;
+            animation: fadeIn 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+            animation: spin 1s linear infinite;
+        }
+        
+        .farm-selector {
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .water-stats {
+            background-color: rgba(234, 242, 248, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+            animation: fadeIn 0.6s ease;
+            backdrop-filter: blur(5px);
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2874a6;
+            transition: all 0.3s ease;
+        }
+        
+        .progress {
+            height: 12px;
+            border-radius: 6px;
+            transition: all 0.5s ease;
+        }
+        
+        .progress-bar {
+            transition: width 1s ease;
+        }
+        
+        .btn {
+            transition: all 0.3s ease;
+            font-weight: 500;
+            border-radius: 8px;
+            padding: 10px 20px;
+        }
+        
+        .btn-primary {
+            background-color: var(--light-green);
+            border-color: var(--accent-green);
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--accent-green);
+            border-color: var(--deep-green);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .btn-outline-primary {
+            color: var(--light-green);
+            border-color: var(--light-green);
+        }
+        
+        .btn-outline-primary:hover {
+            background-color: var(--light-green);
+            border-color: var(--light-green);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .form-control, .form-select {
+            border-radius: 8px;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--light-green);
+            box-shadow: 0 0 0 0.25rem rgba(79, 157, 105, 0.25);
+        }
+        
+        .header-date-controls {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 10px 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+        }
+        
+        .header-date-controls:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .header-date-controls .form-control {
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        .badge {
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .badge:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 600;
+        }
+        
+        .text-muted {
+            color: #6c757d !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="header" class="mb-4">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1 class="mb-0"><i class="fas fa-tint mr-2"></i>Farm Flood Risk Monitoring</h1>
+                    <p class="mb-0"><small>Monitor water levels and flood risks for your farms</small></p>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex justify-content-end align-items-center">
+                        <div class="header-date-controls me-3">
+                            <div class="d-flex align-items-center">
+                                <div class="me-2">
+                                    <label for="startDate" class="form-label mb-0 text-white"><small>Start Date</small></label>
+                                    <input type="date" class="form-control form-control-sm" id="startDate">
+                                </div>
+                                <div class="me-2">
+                                    <label for="endDate" class="form-label mb-0 text-white"><small>End Date</small></label>
+                                    <input type="date" class="form-control form-control-sm" id="endDate">
+                                </div>
+                                <div class="d-flex align-items-end">
+                                    <button id="updateBtn" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-sync-alt me-1"></i> Update
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="badge bg-light text-dark">
+                            <i class="fas fa-user me-1"></i> {{ farmer.name }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="farm-selector">
+                    <label for="farmSelect" class="form-label"><i class="fas fa-map-marker-alt me-2"></i>Select Farm:</label>
+                    <select id="farmSelect" class="form-select">
+                        {% for farm in farms %}
+                        <option value="{{ farm.id }}" data-boundary='{{ farm.boundary | tojson }}' {% if farm.id == selected_farm.id %}selected{% endif %}>
+                            {{ farm.name }} ({{ farm.location }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div id="map-container">
+                    <div id="map"></div>
+                    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Analyzing flood risk...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="sidebar">
+                    <h4><i class="fas fa-exclamation-triangle me-2"></i> Flood Risk Status</h4>
+                    <div id="riskIndicator" class="risk-indicator risk-normal">
+                        <i class="fas fa-check-circle fa-2x me-3"></i>
+                        <div>
+                            <div id="riskLevel">Normal</div>
+                            <small id="riskDescription">No significant flood risk detected</small>
+                        </div>
+                    </div>
+
+                    <div class="water-stats">
+                        <h5><i class="fas fa-water me-2"></i> Water Coverage</h5>
+                        <div class="stat-value" id="waterCoverage">0%</div>
+                        <div class="progress mt-3" style="height: 12px;">
+                            <div id="waterProgress" class="progress-bar bg-info" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted">Percentage of area with detected water</small>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5><i class="fas fa-map-marked-alt me-2"></i> Map Legend</h5>
+                        <div class="legend">
+                            <div><i style="background: #0000FF;"></i> Water (high confidence)</div>
+                            <div><i style="background: #6666FF;"></i> Water (medium confidence)</div>
+                            <div><i style="background: #AAAAFF;"></i> Water (low confidence)</div>
+                            <div><i style="background: #E9E9E9;"></i> Land</div>
+                            <div><i style="background: #000000; opacity: 0;"></i> No data</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button id="downloadReportBtn" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-file-pdf me-2"></i> Download Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script>
+        // Initialize map with the farm boundary
+        const initialGeoJSON = {{ geojson | safe }};
+        const initialCenter = {{ center | tojson }};
+        
+        let map;
+        let farmLayer;
+        let waterOverlay;
+        let farmBoundaryLayer;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            setupEventListeners();
+            loadInitialData();
+            
+            // Set default dates (last 30 days)
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 30);
+            
+            document.getElementById('startDate').valueAsDate = startDate;
+            document.getElementById('endDate').valueAsDate = endDate;
+        });
+
+        function initMap() {
+            map = L.map('map').setView(initialCenter, 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Add farm boundary
+            farmBoundaryLayer = L.geoJSON(initialGeoJSON, {
+                style: {
+                    color: '#FF5722',
+                    weight: 3,
+                    opacity: 1,
+                    fillOpacity: 0.1
+                }
+            }).addTo(map);
+            
+            // Fit map to boundary
+            map.fitBounds(farmBoundaryLayer.getBounds());
+        }
+
+        function setupEventListeners() {
+            document.getElementById('updateBtn').addEventListener('click', updateFloodAnalysis);
+            document.getElementById('farmSelect').addEventListener('change', handleFarmChange);
+            document.getElementById('downloadReportBtn').addEventListener('click', downloadReport);
+        }
+
+        function loadInitialData() {
+            updateFloodAnalysis();
+        }
+
+        async function handleFarmChange() {
+            const selectedOption = document.getElementById('farmSelect').selectedOptions[0];
+            const boundaryData = JSON.parse(selectedOption.dataset.boundary);
+            
+            showLoading(true);
+            
+            try {
+                // Create GeoJSON feature from boundary data
+                const newGeoJSON = {
+                    type: "FeatureCollection",
+                    features: [{
+                        type: "Feature",
+                        properties: {},
+                        geometry: boundaryData
+                    }]
+                };
+                
+                // Update map with new boundary
+                map.removeLayer(farmBoundaryLayer);
+                farmBoundaryLayer = L.geoJSON(newGeoJSON, {
+                    style: {
+                        color: '#FF5722',
+                        weight: 3,
+                        opacity: 1,
+                        fillOpacity: 0.1
+                    }
+                }).addTo(map);
+                
+                map.fitBounds(farmBoundaryLayer.getBounds());
+                
+                // Update flood analysis for new farm
+                await updateFloodAnalysis();
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Farm Changed',
+                    text: `Now viewing ${selectedOption.text}`,
+                    showConfirmButton: false,
+                    timer: 1500,
+                    background: 'var(--background-light)',
+                    backdrop: `
+                        rgba(0,0,0,0.4)
+                        url("{{ url_for('static', filename='img/im.jpg') }}")
+                        center top
+                        no-repeat
+                    `
+                });
+            } catch (error) {
+                console.error('Error changing farm:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to load farm data. Please try again.',
+                    confirmButtonColor: 'var(--accent-green)'
+                });
+                showLoading(false);
+            }
+        }
+
+        async function updateFloodAnalysis() {
+            showLoading(true);
+            
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            try {
+                // Get current farm boundary as GeoJSON
+                const farmGeoJSON = {
+                    type: "FeatureCollection",
+                    features: [{
+                        type: "Feature",
+                        properties: {},
+                        geometry: farmBoundaryLayer.toGeoJSON().features[0].geometry
+                    }]
+                };
+                
+                // Send request to backend
+                const response = await fetch('/get-water-detection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ...farmGeoJSON,
+                        start_date: startDate,
+                        end_date: endDate
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to get flood analysis');
+                
+                const data = await response.json();
+                
+                if (data.status !== 'success') {
+                    throw new Error(data.message || 'Failed to process flood data');
+                }
+                
+                // Update water overlay on map
+                updateWaterOverlay(data.image);
+                
+                // Update risk indicators
+                updateRiskIndicators(data.water_coverage, data.risk_level);
+                
+                // Show success notification
+                Swal.fire({
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'Analysis Updated',
+                    showConfirmButton: false,
+                    timer: 1500,
+                    toast: true,
+                    background: 'var(--background-light)'
+                });
+                
+            } catch (error) {
+                console.error('Error updating flood analysis:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to update flood analysis. Please try again.',
+                    confirmButtonColor: 'var(--accent-green)'
+                });
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function updateWaterOverlay(imageData) {
+            // Remove existing overlay if it exists
+            if (waterOverlay) {
+                map.removeLayer(waterOverlay);
+            }
+            
+            // Convert image data to URL
+            const imageUrl = convertImageDataToUrl(imageData);
+            
+            // Get bounds of the farm
+            const bounds = farmBoundaryLayer.getBounds();
+            
+            // Add new overlay
+            waterOverlay = L.imageOverlay(imageUrl, bounds, {
+                opacity: 0.7
+            }).addTo(map);
+            
+            // Add animation to the overlay
+            waterOverlay.getElement().style.animation = 'fadeIn 1s ease';
+        }
+
+        function convertImageDataToUrl(imageData) {
+            // Convert the array to a canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = imageData[0].length;
+            canvas.height = imageData.length;
+            
+            const ctx = canvas.getContext('2d');
+            const imageDataObj = ctx.createImageData(canvas.width, canvas.height);
+            
+            // Flatten the 3D array into a 1D array
+            const flatArray = [];
+            for (let y = 0; y < imageData.length; y++) {
+                for (let x = 0; x < imageData[y].length; x++) {
+                    const pixel = imageData[y][x];
+                    // Assuming imageData is in format [R, G, B, A] with values 0-1
+                    flatArray.push(
+                        Math.round(pixel[0] * 255), 
+                        Math.round(pixel[1] * 255), 
+                        Math.round(pixel[2] * 255), 
+                        Math.round(pixel[3] * 255)
+                    );
+                }
+            }
+            
+            imageDataObj.data.set(new Uint8ClampedArray(flatArray));
+            ctx.putImageData(imageDataObj, 0, 0);
+            
+            return canvas.toDataURL();
+        }
+
+        function updateRiskIndicators(coverage, riskLevel) {
+            // Update water coverage display with animation
+            const waterCoverageElement = document.getElementById('waterCoverage');
+            const waterProgressElement = document.getElementById('waterProgress');
+            
+            // Animate the percentage change
+            animateValue(waterCoverageElement, 0, coverage, 1000);
+            
+            // Animate the progress bar
+            setTimeout(() => {
+                waterProgressElement.style.width = `${coverage}%`;
+            }, 100);
+            
+            // Update risk indicator
+            const riskElement = document.getElementById('riskIndicator');
+            const riskLevelElement = document.getElementById('riskLevel');
+            const riskDescriptionElement = document.getElementById('riskDescription');
+            
+            // Remove all risk classes
+            riskElement.className = 'risk-indicator';
+            
+            // Determine risk level based on coverage if not provided
+            let actualRiskLevel = riskLevel;
+            if (!actualRiskLevel) {
+                if (coverage > 30) {
+                    actualRiskLevel = 'High';
+                } else if (coverage > 15) {
+                    actualRiskLevel = 'Medium';
+                } else if (coverage > 5) {
+                    actualRiskLevel = 'Low';
+                } else {
+                    actualRiskLevel = 'Normal';
+                }
+            }
+            
+            // Add appropriate risk class and update content
+            let iconClass = 'fa-check-circle';
+            let description = '';
+            
+            switch (actualRiskLevel.toLowerCase()) {
+                case 'high':
+                    riskElement.classList.add('risk-high');
+                    iconClass = 'fa-exclamation-triangle';
+                    description = 'High flood risk - Immediate attention required';
+                    // Pulse animation for high risk
+                    riskElement.classList.add('pulse');
+                    break;
+                case 'medium':
+                    riskElement.classList.add('risk-medium');
+                    iconClass = 'fa-exclamation-circle';
+                    description = 'Moderate flood risk - Monitor closely';
+                    riskElement.classList.remove('pulse');
+                    break;
+                case 'low':
+                    riskElement.classList.add('risk-low');
+                    iconClass = 'fa-info-circle';
+                    description = 'Low flood risk - No immediate action needed';
+                    riskElement.classList.remove('pulse');
+                    break;
+                default:
+                    riskElement.classList.add('risk-normal');
+                    description = 'No significant flood risk detected';
+                    riskElement.classList.remove('pulse');
+            }
+            
+            riskLevelElement.textContent = actualRiskLevel;
+            riskDescriptionElement.textContent = description;
+            
+            // Update icon with animation
+            const icon = riskElement.querySelector('i');
+            icon.className = `fas ${iconClass} fa-2x me-3`;
+            
+            // Show appropriate alert for high risk
+            if (actualRiskLevel.toLowerCase() === 'high') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'High Flood Risk Detected!',
+                    text: 'Your farm has significant water coverage that may indicate flooding.',
+                    confirmButtonColor: 'var(--accent-green)',
+                    background: 'var(--background-light)'
+                });
+            }
+        }
+
+        function animateValue(element, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                const value = Math.floor(progress * (end - start) + start);
+                element.textContent = value + "%";
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        function showLoading(show) {
+            const loadingElement = document.getElementById('loadingOverlay');
+            if (show) {
+                loadingElement.style.display = 'flex';
+                loadingElement.style.animation = 'fadeIn 0.3s ease';
+            } else {
+                loadingElement.style.animation = 'fadeOut 0.3s ease';
+                setTimeout(() => {
+                    loadingElement.style.display = 'none';
+                }, 300);
+            }
+        }
+
+        async function downloadReport() {
+            showLoading(true);
+            
+            try {
+                // Show preparing report notification
+                Swal.fire({
+                    title: 'Preparing Report',
+                    html: 'Please wait while we generate your report...',
+                    timerProgressBar: true,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    },
+                    background: 'var(--background-light)'
+                });
+                
+                // Capture map as image
+                const mapElement = document.getElementById('map-container');
+                const canvas = await html2canvas(mapElement, {
+                    useCORS: true,
+                    allowTaint: true,
+                    scale: 2,
+                    logging: false,
+                    backgroundColor: null
+                });
+                
+                // Create PDF
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('landscape');
+                
+                // Add title and date
+                pdf.setFontSize(18);
+                pdf.setTextColor(26, 77, 46); // Deep green
+                pdf.text('Farm Flood Risk Report', 20, 20);
+                pdf.setFontSize(12);
+                pdf.setTextColor(0, 0, 0); // Black
+                pdf.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, 30);
+                
+                // Add farm info
+                const selectedFarm = document.getElementById('farmSelect').selectedOptions[0].text;
+                pdf.text(`Farm: ${selectedFarm}`, 20, 40);
+                
+                // Add risk status
+                const riskStatus = document.getElementById('riskLevel').textContent;
+                pdf.text(`Current Risk Status: ${riskStatus}`, 20, 50);
+                
+                // Add water coverage
+                const waterCoverage = document.getElementById('waterCoverage').textContent;
+                pdf.text(`Water Coverage: ${waterCoverage}`, 20, 60);
+                
+                // Add map image
+                const imgData = canvas.toDataURL('image/png');
+                pdf.addImage(imgData, 'PNG', 20, 70, 250, 150);
+                
+                // Add legend
+                pdf.setFontSize(10);
+                pdf.text('Legend:', 20, 230);
+                pdf.text('■ Water (high confidence)', 40, 240);
+                pdf.text('■ Water (medium confidence)', 40, 250);
+                pdf.text('■ Water (low confidence)', 40, 260);
+                pdf.text('■ Land', 40, 270);
+                
+                // Save PDF
+                pdf.save('Flood_Risk_Report.pdf');
+                
+                // Show success notification
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Report Downloaded',
+                    text: 'Your flood risk report has been downloaded successfully.',
+                    confirmButtonColor: 'var(--accent-green)',
+                    background: 'var(--background-light)'
+                });
+                
+            } catch (error) {
+                console.error('Error generating report:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to generate report. Please try again.',
+                    confirmButtonColor: 'var(--accent-green)'
+                });
+            } finally {
+                showLoading(false);
+            }
+        }
+    </script>
+</body>
+</html>

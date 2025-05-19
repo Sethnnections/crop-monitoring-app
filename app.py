@@ -318,6 +318,139 @@ function isCloud(samples){
     except Exception as e:
         logger.exception("Error processing NDVI request")
         return jsonify({'status': 'error', 'message': str(e)})
+    
+    
+@app.route('/flood-monitoring/<int:farmer_id>')
+def flood_monitoring(farmer_id):
+    try:
+        url = f"{API_BASE_URL}/{farmer_id}/farms"
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        
+        if not data.get('farms') or len(data['farms']) == 0:
+            raise ValueError("No farms found for this farmer")
+        
+        first_farm = data['farms'][0]
+        if not first_farm.get('boundary'):
+            raise ValueError("Farm boundary data not found")
+        
+        initial_geojson = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "name": first_farm.get('name'),
+                        "size": first_farm.get('size'),
+                        "location": first_farm.get('location')
+                    },
+                    "geometry": first_farm['boundary']
+                }
+            ]
+        }
+        
+        centroid = get_geojson_centroid(initial_geojson)
+        
+        return render_template(
+            'flood_monitoring.html',
+            center=centroid,
+            geojson=json.dumps(initial_geojson),
+            farmer=data['farms'][0]['farmer'],
+            farms=data['farms'],
+            selected_farm=first_farm
+        )
+    except Exception as e:
+        logger.error(f"Failed to render flood monitoring: {e}")
+        return "Error loading flood monitoring data", 500
+
+
+@app.route('/get-flood-risk', methods=['POST'])
+def get_flood_risk():
+    try:
+        geojson_data = request.json
+        logger.info("Received flood risk request")
+
+        # Extract optional date parameters from the query string or JSON
+        start_date = request.args.get('start_date') or geojson_data.get('start_date')
+        end_date = request.args.get('end_date') or geojson_data.get('end_date')
+
+        # Fallback to current month's first day and now
+        if not start_date or not end_date:
+            today = datetime.utcnow()
+            start_date = date(today.year, today.month, 1).isoformat()
+            end_date = today.isoformat()
+
+        time_interval = (start_date, end_date)
+        logger.info(f"Using time interval: {time_interval}")
+
+        # Validate and process the GeoJSON
+        validate_geojson(geojson_data)
+        geometry = get_geometry_from_geojson(geojson_data)
+        bbox = get_geojson_bbox(geojson_data)
+
+        resolution = 10
+        size = bbox_to_dimensions(bbox, resolution=resolution)
+
+        config = SHConfig()
+        config.sh_client_id = app.config['SH_CLIENT_ID']
+        config.sh_client_secret = app.config['SH_CLIENT_SECRET']
+        config.instance_id = app.config['SH_INSTANCE_ID']
+
+        # Simple flood detection: Water index (NDWI)
+        evalscript = """//VERSION=3
+function setup() {
+    return {
+        input: ["B03", "B08", "dataMask"],
+        output: [
+            { id: "default", bands: 4 },
+            { id: "ndwi", bands: 1, sampleType: "FLOAT32" },
+            { id: "dataMask", bands: 1 }
+        ]
+    };
+}
+
+function evaluatePixel(samples) {
+    let ndwi = (samples.B03 - samples.B08) / (samples.B03 + samples.B08 + 0.00001);
+    let water = ndwi > 0.3 ? 1 : 0;
+    let color = water === 1 ? [0, 0, 1, samples.dataMask] : [1, 1, 1, samples.dataMask];
+    return {
+        default: color,
+        ndwi: [ndwi],
+        dataMask: [samples.dataMask]
+    };
+}
+"""
+
+        request_sh = SentinelHubRequest(
+            evalscript=evalscript,
+            input_data=[
+                SentinelHubRequest.input_data(
+                    data_collection=DataCollection.SENTINEL2_L2A,
+                    time_interval=time_interval,
+                    mosaicking_order='leastCC'
+                )
+            ],
+            responses=[
+                SentinelHubRequest.output_response('default', MimeType.PNG)
+            ],
+            geometry=geometry,
+            size=size,
+            config=config
+        )
+
+        data = request_sh.get_data()
+        if data:
+            logger.info("Flood risk data retrieved successfully.")
+            return jsonify({'status': 'success', 'image': data[0].tolist()})
+        else:
+            logger.warning("No data available for the selected time range.")
+            return jsonify({'status': 'error', 'message': 'No data available for the selected time range'})
+
+    except Exception as e:
+        logger.exception("Error processing flood risk request")
+        return jsonify({'status': 'error', 'message': str(e)})
+
   
 
 if __name__ == '__main__':
