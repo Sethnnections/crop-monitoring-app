@@ -85,6 +85,21 @@ def calculate_ndvi(red, nir):
     ndvi = (nir - red) / (nir + red + 1e-8)
     return ndvi.tolist()
 
+
+def calculate_ndwi(green, nir):
+    """Calculate Normalized Difference Water Index"""
+    green = np.asarray(green, dtype=np.float32)
+    nir = np.asarray(nir, dtype=np.float32)
+    ndwi = (green - nir) / (green + nir + 1e-8)
+    return ndwi.tolist()
+
+def calculate_mndwi(green, swir):
+    """Calculate Modified Normalized Difference Water Index"""
+    green = np.asarray(green, dtype=np.float32)
+    swir = np.asarray(swir, dtype=np.float32)
+    mndwi = (green - swir) / (green + swir + 1e-8)
+    return mndwi.tolist()
+
 def validate_geojson(geojson_data):
     """Validate and normalize GeoJSON structure"""
     if not isinstance(geojson_data, dict):
@@ -319,7 +334,7 @@ function isCloud(samples){
         logger.exception("Error processing NDVI request")
         return jsonify({'status': 'error', 'message': str(e)})
     
-    
+  
 @app.route('/flood-monitoring/<int:farmer_id>')
 def flood_monitoring(farmer_id):
     try:
@@ -363,19 +378,17 @@ def flood_monitoring(farmer_id):
     except Exception as e:
         logger.error(f"Failed to render flood monitoring: {e}")
         return "Error loading flood monitoring data", 500
+    
 
-
-@app.route('/get-flood-risk', methods=['POST'])
-def get_flood_risk():
+@app.route('/get-water-detection', methods=['POST'])
+def get_water_detection():
     try:
         geojson_data = request.json
-        logger.info("Received flood risk request")
+        logger.info("Received water detection request")
 
-        # Extract optional date parameters from the query string or JSON
         start_date = request.args.get('start_date') or geojson_data.get('start_date')
         end_date = request.args.get('end_date') or geojson_data.get('end_date')
 
-        # Fallback to current month's first day and now
         if not start_date or not end_date:
             today = datetime.utcnow()
             start_date = date(today.year, today.month, 1).isoformat()
@@ -384,7 +397,6 @@ def get_flood_risk():
         time_interval = (start_date, end_date)
         logger.info(f"Using time interval: {time_interval}")
 
-        # Validate and process the GeoJSON
         validate_geojson(geojson_data)
         geometry = get_geometry_from_geojson(geojson_data)
         bbox = get_geojson_bbox(geojson_data)
@@ -397,26 +409,48 @@ def get_flood_risk():
         config.sh_client_secret = app.config['SH_CLIENT_SECRET']
         config.instance_id = app.config['SH_INSTANCE_ID']
 
-        # Simple flood detection: Water index (NDWI)
-        evalscript = """//VERSION=3
+        # Enhanced water detection using both NDWI and MNDWI
+        evalscript = """
+//VERSION=3
 function setup() {
     return {
-        input: ["B03", "B08", "dataMask"],
+        input: ["B03", "B08", "B11", "dataMask"],
         output: [
             { id: "default", bands: 4 },
             { id: "ndwi", bands: 1, sampleType: "FLOAT32" },
+            { id: "mndwi", bands: 1, sampleType: "FLOAT32" },
+            { id: "water_mask", bands: 1, sampleType: "UINT8" },
             { id: "dataMask", bands: 1 }
         ]
     };
 }
 
 function evaluatePixel(samples) {
-    let ndwi = (samples.B03 - samples.B08) / (samples.B03 + samples.B08 + 0.00001);
-    let water = ndwi > 0.3 ? 1 : 0;
-    let color = water === 1 ? [0, 0, 1, samples.dataMask] : [1, 1, 1, samples.dataMask];
+    // Calculate water indices
+    const ndwi = (samples.B03 - samples.B08) / (samples.B03 + samples.B08 + 0.0001);
+    const mndwi = (samples.B03 - samples.B11) / (samples.B03 + samples.B11 + 0.0001);
+    
+    // Combined water detection (NDWI > 0.2 OR MNDWI > 0)
+    const isWater = (ndwi > 0.2 || mndwi > 0) && samples.dataMask === 1;
+    
+    // Visual representation
+    let color;
+    if (!samples.dataMask) {
+        color = [0, 0, 0, 0]; // No data (transparent)
+    } else if (isWater) {
+        // Blue gradient based on confidence (darker blue = more confident)
+        const confidence = Math.max(ndwi, mndwi);
+        color = [0, 0, 0.5 + confidence * 0.5, 1];
+    } else {
+        // Non-water areas in light gray
+        color = [0.9, 0.9, 0.9, 1];
+    }
+    
     return {
         default: color,
         ndwi: [ndwi],
+        mndwi: [mndwi],
+        water_mask: [isWater ? 1 : 0],
         dataMask: [samples.dataMask]
     };
 }
@@ -432,7 +466,8 @@ function evaluatePixel(samples) {
                 )
             ],
             responses=[
-                SentinelHubRequest.output_response('default', MimeType.PNG)
+                SentinelHubRequest.output_response('default', MimeType.PNG),
+                SentinelHubRequest.output_response('water_mask', MimeType.TIFF)
             ],
             geometry=geometry,
             size=size,
@@ -441,17 +476,59 @@ function evaluatePixel(samples) {
 
         data = request_sh.get_data()
         if data:
-            logger.info("Flood risk data retrieved successfully.")
-            return jsonify({'status': 'success', 'image': data[0].tolist()})
+            logger.info("Water detection data retrieved successfully")
+            logger.debug(f"Data structure: {type(data)}")
+            
+            # Fix: Correctly access the returned data structure
+            if isinstance(data, list) and len(data) == 1 and isinstance(data[0], dict):
+                # Extract image and water mask from the dictionary
+                image_data = data[0].get('default.png')
+                water_mask = data[0].get('water_mask.tif')
+                
+                if image_data is None or water_mask is None:
+                    logger.error(f"Missing expected data keys. Available keys: {data[0].keys()}")
+                    return jsonify({'status': 'error', 'message': 'Invalid data structure from SentinelHub'})
+            else:
+                # If structure is different, try to adapt
+                try:
+                    # Try original approach in case API returns different format
+                    image_data = data[0]
+                    water_mask = data[1]
+                except (IndexError, TypeError):
+                    logger.error(f"Unexpected data structure: {data}")
+                    return jsonify({'status': 'error', 'message': 'Unexpected data structure from SentinelHub'})
+            
+            # Ensure data is numpy arrays
+            image_data = np.array(image_data)
+            water_mask = np.array(water_mask)
+            
+            # Calculate water coverage percentage
+            total_pixels = np.sum(water_mask >= 0)  # All valid pixels
+            water_pixels = np.sum(water_mask == 1)
+            water_coverage = (water_pixels / total_pixels * 100) if total_pixels > 0 else 0
+            print({
+                'status': 'success',
+                'image': image_data.tolist(),
+                'water_coverage': round(water_coverage, 2),
+                'risk_level': 12
+            })
+
+            return jsonify({
+                'status': 'success',
+                'image': image_data.tolist(),
+                'water_coverage': round(water_coverage, 2),
+                'risk_level': 12
+            })
+        
         else:
-            logger.warning("No data available for the selected time range.")
-            return jsonify({'status': 'error', 'message': 'No data available for the selected time range'})
+            logger.warning("No data available for the selected time range")
+            return jsonify({'status': 'error', 'message': 'No data available'})
 
     except Exception as e:
-        logger.exception("Error processing flood risk request")
+        logger.exception("Error processing water detection request")
         return jsonify({'status': 'error', 'message': str(e)})
+    
 
-  
 
 if __name__ == '__main__':
     app.run(debug=True)
