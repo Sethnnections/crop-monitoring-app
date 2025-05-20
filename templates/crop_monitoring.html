@@ -277,10 +277,12 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="logo-container">
-                <img src="/static/img/logo.png" alt="Logo" class="logo">
+                <img src="{{ url_for('static', filename='img/logo.jpg') }}"  alt="Logo" class="logo">
             </div>
             
-            <h3 class="farmer-name" id="farmer-name-display">{{ farmer.name }} {{ farmer.surname }}</h3>
+            <h3 class="farmer-name" id="farmer-name-display">
+                {{ farmer.name }} {{ farmer.surname }}
+            </h3>
             
             <!-- Farm Selector Card -->
             <div class="card">
@@ -404,7 +406,7 @@
             
             <!-- Loading Indicator -->
             <div class="loader" id="loader">
-                <img src="/static/img/spinner.gif" alt="Loading">
+                <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="Loading" style="border-radius: 100%;">
                 <p>Processing satellite data...</p>
             </div>
         </div>
