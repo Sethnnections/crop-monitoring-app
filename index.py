@@ -157,7 +157,7 @@ def get_geometry_from_geojson(geojson_data):
         logger.error(f"Error creating geometry: {e}")
         raise
 
-@app.route('/crop-monitoring/<int:farmer_id>')
+@app.route('/monitoring/<int:farmer_id>')
 def crop_monitoring(farmer_id):
     try:
         url = f"{API_BASE_URL}/{farmer_id}/farms"
@@ -442,6 +442,9 @@ def flood_monitoring(farmer_id):
         
         centroid = get_geojson_centroid(initial_geojson)
         
+        print("Flood Monitoring Center:", centroid)
+        print("Initial GeoJSON:", json.dumps(initial_geojson))
+        print("Farmer Name:", data.get('farmer', {}).get('name'))
         return render_template(
             'flood_monitoring.html',
             center=centroid,
