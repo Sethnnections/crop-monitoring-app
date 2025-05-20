@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crop Monitoring - Field Analysis</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-color-markers@1.0.0/css/leaflet-color-markers.css">
+    <style>
+        body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f9fa;
+}
+
+.sidebar {
+    background-color: #ffffff;
+    height: 100vh;
+    overflow-y: auto;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    padding: 0;
+}
+
+.map-container {
+    padding: 0;
+    position: relative;
+    height: 100vh;
+}
+
+#map {
+    height: 100%;
+    width: 100%;
+}
+
+.card {
+    margin-bottom: 1rem;
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    font-weight: 600;
+}
+
+.legend {
+    position: absolute;
+    bottom: 30px;
+    right: 10px;
+    z-index: 1000;
+    background: white;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+}
+
+.legend h6 {
+    margin: 0 0 5px 0;
+    text-align: center;
+}
+
+#legend-gradient {
+    height: 10px;
+    width: 150px;
+    margin-bottom: 5px;
+}
+
+.legend-labels {
+    display: flex;
+    justify-content: space-between;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table th, .table td {
+    padding: 0.3rem;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        height: auto;
+    }
+    
+    .map-container {
+        height: 70vh;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-3 sidebar">
+                <h2 class="mt-3">Field Analysis</h2>
+                
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5>Vegetation Indices</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="index-select" class="form-label">Select Index:</label>
+                            <select id="index-select" class="form-select">
+                                <option value="ndvi">NDVI (Normalized Difference Vegetation Index)</option>
+                                <option value="msavi">MSAVI (Modified Soil-Adjusted Vegetation Index)</option>
+                                <option value="reci">RECI (Red Edge Chlorophyll Index)</option>
+                                <option value="ndre">NDRE (Normalized Difference Red Edge)</option>
+                                <option value="ndmi">NDMI (Normalized Difference Moisture Index)</option>
+                                <option value="ndwi">NDWI (Normalized Difference Water Index)</option>
+                                <option value="mndwi">MNDWI (Modified NDWI)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="date-range" class="form-label">Date Range:</label>
+                            <input type="text" id="date-range" class="form-control" placeholder="Select date range">
+                        </div>
+                        
+                        <button id="load-data" class="btn btn-primary w-100">Load Data</button>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5>Index Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="index-info">
+                            <p>Select an index to see details</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="stats-display">
+                            <p>No data loaded yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-9 map-container">
+                <div id="map"></div>
+                <div id="legend" class="legend">
+                    <h6>Index Value</h6>
+                    <div id="legend-gradient"></div>
+                    <div class="legend-labels">
+                        <span id="legend-min">0</span>
+                        <span id="legend-max">1</span>
+                    </div>
+                </div>
+                <div id="loading" class="loading-overlay">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/daterangepicker@3.1.0/daterangepicker.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker@3.1.0/daterangepicker.css" />
+    
+    <script>
+        // Global variables
+        let map;
+        let currentHeatmap;
+        let currentFieldBoundary;
+        let currentIndex = 'ndvi';
+        let fieldData = {{ geojson|tojson }};
+        let center = {{ center|tojson }};
+        let farmerId = {{ farmer_id|tojson }};
+        
+        // Index information
+        const indexInfo = {
+            ndvi: {
+                name: "Normalized Difference Vegetation Index",
+                description: "Measures vegetation health and density. Values range from -1 to 1, with healthy vegetation typically between 0.3-0.8.",
+                formula: "(NIR - Red) / (NIR + Red)",
+                range: { min: -1, max: 1 },
+                colors: ['#d73027', '#f46d43', '#fdae61', '#fee08b', '#d9ef8b', '#91cf60', '#1a9850']
+            },
+            msavi: {
+                name: "Modified Soil-Adjusted Vegetation Index",
+                description: "Improves NDVI by minimizing soil brightness effects in areas with low vegetation cover.",
+                formula: "(2 * NIR + 1 - √((2 * NIR + 1)² - 8 * (NIR - Red))) / 2",
+                range: { min: -1, max: 1 },
+                colors: ['#d73027', '#f46d43', '#fdae61', '#fee08b', '#d9ef8b', '#91cf60', '#1a9850']
+            },
+            reci: {
+                name: "Red Edge Chlorophyll Index",
+                description: "Sensitive to chlorophyll content in vegetation. Higher values indicate more chlorophyll.",
+                formula: "(NIR / RedEdge) - 1",
+                range: { min: -1, max: 10 },
+                colors: ['#f7fcf0', '#e0f3db', '#ccebc5', '#a8ddb5', '#7bccc4', '#4eb3d3', '#2b8cbe', '#0868ac', '#084081']
+            },
+            ndre: {
+                name: "Normalized Difference Red Edge",
+                description: "Measures vegetation health using the red edge band, sensitive to chlorophyll and nitrogen content.",
+                formula: "(NIR - RedEdge) / (NIR + RedEdge)",
+                range: { min: -1, max: 1 },
+                colors: ['#d73027', '#f46d43', '#fdae61', '#fee08b', '#d9ef8b', '#91cf60', '#1a9850']
+            },
+            ndmi: {
+                name: "Normalized Difference Moisture Index",
+                description: "Measures vegetation water content. Higher values indicate more moisture.",
+                formula: "(NIR - SWIR) / (NIR + SWIR)",
+                range: { min: -1, max: 1 },
+                colors: ['#ffffcc', '#c7e9b4', '#7fcdbb', '#41b6c4', '#2c7fb8', '#253494']
+            },
+            ndwi: {
+                name: "Normalized Difference Water Index",
+                description: "Detects water content in vegetation and water bodies using green and NIR bands.",
+                formula: "(Green - NIR) / (Green + NIR)",
+                range: { min: -1, max: 1 },
+                colors: ['#ffffff', '#f0f9e8', '#bae4bc', '#7bccc4', '#43a2ca', '#0868ac']
+            },
+            mndwi: {
+                name: "Modified Normalized Difference Water Index",
+                description: "Improved water detection using green and SWIR bands, better at distinguishing water from vegetation.",
+                formula: "(Green - SWIR) / (Green + SWIR)",
+                range: { min: -1, max: 1 },
+                colors: ['#ffffff', '#f0f9e8', '#bae4bc', '#7bccc4', '#43a2ca', '#0868ac']
+            }
+        };
+
+        // Initialize the map when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            initDateRangePicker();
+            setupEventListeners();
+            updateIndexInfo(currentIndex);
+        });
+
+        function initMap() {
+            // Initialize the map
+            map = L.map('map').setView(center, 15);
+            
+            // Add base map layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Add field boundary
+            currentFieldBoundary = L.geoJSON(fieldData, {
+                style: {
+                    color: '#3388ff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.2
+                }
+            }).addTo(map);
+            
+            // Fit map to field boundary
+            map.fitBounds(currentFieldBoundary.getBounds());
+        }
+
+        function initDateRangePicker() {
+            const today = new Date();
+            const lastMonth = new Date();
+            lastMonth.setMonth(lastMonth.getMonth() - 1);
+            
+            $('#date-range').daterangepicker({
+                startDate: lastMonth,
+                endDate: today,
+                opens: 'left',
+                locale: {
+                    format: 'YYYY-MM-DD'
+                }
+            });
+        }
+
+        function setupEventListeners() {
+            // Index selection change
+            document.getElementById('index-select').addEventListener('change', function(e) {
+                currentIndex = e.target.value;
+                updateIndexInfo(currentIndex);
+            });
+            
+            // Load data button
+            document.getElementById('load-data').addEventListener('click', loadVegetationData);
+        }
+
+        function updateIndexInfo(index) {
+            const info = indexInfo[index];
+            const infoDiv = document.getElementById('index-info');
+            
+            infoDiv.innerHTML = `
+                <h6>${info.name}</h6>
+                <p>${info.description}</p>
+                <p><strong>Formula:</strong> ${info.formula}</p>
+                <p><strong>Typical Range:</strong> ${info.range.min} to ${info.range.max}</p>
+            `;
+            
+            // Update legend gradient
+            updateLegend(info);
+        }
+
+        function updateLegend(indexInfo) {
+            const legendGradient = document.getElementById('legend-gradient');
+            const gradientColors = indexInfo.colors.join(', ');
+            
+            legendGradient.style.background = `linear-gradient(to right, ${gradientColors})`;
+            document.getElementById('legend-min').textContent = indexInfo.range.min.toFixed(2);
+            document.getElementById('legend-max').textContent = indexInfo.range.max.toFixed(2);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'flex' : 'none';
+        }
+
+        function loadVegetationData() {
+            showLoading(true);
+            
+            const dateRange = $('#date-range').data('daterangepicker');
+            const startDate = dateRange.startDate.format('YYYY-MM-DD');
+            const endDate = dateRange.endDate.format('YYYY-MM-DD');
+            
+            // Prepare the request data
+            const requestData = {
+                ...fieldData,
+                start_date: startDate,
+                end_date: endDate
+            };
+            
+            // Make the API request
+            fetch('/get-vegetation-indices?start_date=' + startDate + '&end_date=' + endDate, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    processVegetationData(data);
+                } else {
+                    alert('Error loading data: ' + data.message);
+                }
+                showLoading(false);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while loading data');
+                showLoading(false);
+            });
+        }
+
+        function processVegetationData(data) {
+            // Remove previous heatmap if exists
+            if (currentHeatmap) {
+                map.removeLayer(currentHeatmap);
+            }
+            
+            // Get the selected index data
+            const indexData = data.indices[currentIndex];
+            const stats = data.statistics[currentIndex] || {};
+            
+            // Convert the index data to heatmap points
+            const heatmapPoints = convertToHeatmapPoints(indexData, fieldData);
+            
+            // Create the heatmap layer
+            currentHeatmap = L.heatLayer(heatmapPoints, {
+                radius: 15,
+                blur: 15,
+                maxZoom: 17,
+                gradient: indexInfo[currentIndex].colors.reduce((acc, color, i, arr) => {
+                    acc[i / (arr.length - 1)] = color;
+                    return acc;
+                }, {}),
+                minOpacity: 0.5
+            }).addTo(map);
+            
+            // Update statistics display
+            updateStatisticsDisplay(stats);
+        }
+
+        function convertToHeatmapPoints(indexData, fieldGeoJSON) {
+            const points = [];
+            const geometry = fieldGeoJSON.features[0].geometry;
+            
+            if (geometry.type === 'Polygon') {
+                const bbox = getBoundingBox(geometry.coordinates[0]);
+                const width = indexData[0].length;
+                const height = indexData.length;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const value = indexData[y][x];
+                        if (value !== null && !isNaN(value)) {
+                            // Calculate lat/lng from pixel position
+                            const lat = bbox.south + (bbox.north - bbox.south) * (y / height);
+                            const lng = bbox.west + (bbox.east - bbox.west) * (x / width);
+                            
+                            // Only add points that are within the field boundary
+                            if (isPointInPolygon([lng, lat], geometry.coordinates[0])) {
+                                points.push([lat, lng, value]);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return points;
+        }
+
+        function getBoundingBox(coords) {
+            let west = coords[0][0], east = coords[0][0];
+            let south = coords[0][1], north = coords[0][1];
+            
+            for (const [lng, lat] of coords) {
+                west = Math.min(west, lng);
+                east = Math.max(east, lng);
+                south = Math.min(south, lat);
+                north = Math.max(north, lat);
+            }
+            
+            return { west, east, south, north };
+        }
+
+        function isPointInPolygon(point, polygon) {
+            const x = point[0], y = point[1];
+            let inside = false;
+            
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+                
+                const intersect = ((yi > y) !== (yj > y))
+                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            
+            return inside;
+        }
+
+        function updateStatisticsDisplay(stats) {
+            const statsDiv = document.getElementById('stats-display');
+            
+            if (Object.keys(stats).length === 0) {
+                statsDiv.innerHTML = '<p>No statistics available</p>';
+                return;
+            }
+            
+            statsDiv.innerHTML = `
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <th>Mean</th>
+                            <td>${stats.mean ? stats.mean.toFixed(4) : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <th>Median</th>
+                            <td>${stats.median ? stats.median.toFixed(4) : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <th>Minimum</th>
+                            <td>${stats.min ? stats.min.toFixed(4) : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <th>Maximum</th>
+                            <td>${stats.max ? stats.max.toFixed(4) : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <th>Standard Deviation</th>
+                            <td>${stats.std ? stats.std.toFixed(4) : 'N/A'}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+        }
+    </script>
+</body>
+</html>
