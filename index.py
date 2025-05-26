@@ -157,6 +157,18 @@ def get_geometry_from_geojson(geojson_data):
         logger.error(f"Error creating geometry: {e}")
         raise
 
+def calculate_risk_level(water_coverage):
+    """Determine flood risk level based on water coverage percentage"""
+    if water_coverage > 30:
+        return 'High'
+    elif water_coverage > 15:
+        return 'Medium'
+    elif water_coverage > 5:
+        return 'Low'
+    else:
+        return 'Normal'
+
+
 @app.route('/monitoring/<int:farmer_id>')
 def crop_monitoring(farmer_id):
     try:
@@ -589,7 +601,7 @@ function evaluatePixel(samples) {
                 'status': 'success',
                 'image': image_data.tolist(),
                 'water_coverage': round(water_coverage, 2),
-                'risk_level': 12
+                'risk_level': calculate_risk_level(water_coverage)
             })
         
         else:
