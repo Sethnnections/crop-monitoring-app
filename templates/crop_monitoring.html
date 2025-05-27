@@ -570,11 +570,21 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
 <!-- Add this inside the <style> section -->
 
+
+        <script>
+        // Access variables using Jinja2
+        const farmerId = {{ farmer_id | tojson }};
+        const farmId = {{ farm_id | tojson }};
+
+        // Use the variables in your JavaScript code
+        console.log("Farmer ID:", farmerId);
+        console.log("Farm ID:", farmId);
+        </script>
+
     <script>
         // Will be populated by Flask
         const mapCenter = {{ center|tojson }};
         const geojsonData = {{ geojson|safe }};
-        const farmerName = "{{ farmer.name }} {{ farmer.surname }}";
         
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize date pickers with default values (last 30 days)
@@ -882,18 +892,18 @@
         }
 
     function generateReport() {
-        const farmerId = parseInt("{{ farmer.id }}", 10);
-
-        const farmId = parseInt(document.getElementById('farm-select').value, 10);
-        fetch(`/report/${farmerId}/${farmId}?include_images=true`)
-            .then(response => response.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    populateReport(data);
-                    document.getElementById('crop-report').style.display = 'block';
-                }
-            })
-            .catch(error => console.error('Error:', error));
+        // This is a GET request to fetch the report
+        fetch(`/report/${farmerId}/${farmId}?include_images=true`, {
+            method: 'GET'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'success') {
+                populateReport(data);
+                document.getElementById('crop-report').style.display = 'block';
+            }
+        })
+        .catch(error => console.error('Error:', error));
     }
 
     function populateReport(data) {

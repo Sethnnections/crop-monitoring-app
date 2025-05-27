@@ -503,8 +503,8 @@ def fetch_and_store_crop_data():
         logger.exception("Error in fetch_and_store_crop_data")
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/report/<int:farmer_id>/<farm_id>')
+        
+@app.route('/report/<int:farmer_id>/<farm_id>', methods=['GET'])
 def generate_crop_report(farmer_id, farm_id):
     """Generate comprehensive crop monitoring report"""
     try:
@@ -646,14 +646,15 @@ def crop_monitoring(farmer_id):
         }
         
         centroid = get_geojson_centroid(initial_geojson)
-        
         return render_template(
             'crop_monitoring.html',
             center=centroid,
             geojson=json.dumps(initial_geojson),
             farmer=data.get('farmer', {}),
             farms=data['farms'],
-            selected_farm=first_farm
+            selected_farm=first_farm,
+            farmer_id=farmer_id,
+            farm_id=first_farm.get('id')
         )
     except Exception as e:
         logger.error(f"Failed to render crop monitoring: {e}")
