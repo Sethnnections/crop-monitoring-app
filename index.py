@@ -176,6 +176,8 @@ def crop_monitoring(farmer_id):
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
+        print(f"Crop Monitoring Data: {data}")
+        logger.info(f"Fetched crop monitoring data for farmer {farmer_id}")
         
         if not data.get('farms') or len(data['farms']) == 0:
             raise ValueError("No farms found for this farmer")

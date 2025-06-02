@@ -1103,5 +1103,58 @@ def get_monitoring_records(farmer_id):
         logger.exception("Error retrieving monitoring records")
         return jsonify({'status': 'error', 'message': str(e)})
 
+@app.route('/text-report/<int:farmer_id>/<farm_id>', methods=['GET'])
+def text_report(farmer_id, farm_id):
+    """Render a text-based crop monitoring report as HTML"""
+    try:
+        # Get the two most recent records for comparison
+        records = CropMonitoringRecord.query.filter_by(
+            farmer_id=farmer_id,
+            farm_id=farm_id
+        ).order_by(desc(CropMonitoringRecord.image_date)).limit(2).all()
+        
+        if not records:
+            return "No monitoring data found for this farm", 404
+        
+        current_record = records[0]
+        previous_record = records[1] if len(records) > 1 else None
+        
+        changes = {}
+        if previous_record:
+            if current_record.ndvi_value and previous_record.ndvi_value:
+                changes['ndvi'] = current_record.ndvi_value - previous_record.ndvi_value
+            if current_record.reci_value and previous_record.reci_value:
+                changes['reci'] = current_record.reci_value - previous_record.reci_value
+            if current_record.ndmi_value and previous_record.ndmi_value:
+                changes['ndmi'] = current_record.ndmi_value - previous_record.ndmi_value
+        
+        remarks = {
+            'ndvi': generate_index_remarks(
+                current_record.ndvi_value,
+                previous_record.ndvi_value if previous_record else None,
+                'ndvi'
+            ),
+            'reci': generate_index_remarks(
+                current_record.reci_value,
+                previous_record.reci_value if previous_record else None,
+                'reci'
+            ),
+            'ndmi': generate_index_remarks(
+                current_record.ndmi_value,
+                previous_record.ndmi_value if previous_record else None,
+                'ndmi'
+            )
+        }
+        
+        return render_template(
+            'text_report.html',
+            current=current_record,
+            previous=previous_record,
+            changes=changes,
+            remarks=remarks
+        )
+    except Exception as e:
+        logger.exception("Error rendering text report")
+        return "Error generating report", 500
 if __name__ == '__main__':
     app.run(debug=True)
