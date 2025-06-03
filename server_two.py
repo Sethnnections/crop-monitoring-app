@@ -1,4 +1,4 @@
-lets  forcus on the following endpoints by giving them everscript so that the image the report endpoint is producing should already have the the colors  for  specific index value fetch-and-store-crop-data and /report/1/1?include_images=true  from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta
 from flask import Flask, render_template, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, and_
@@ -335,9 +335,169 @@ def generate_index_remarks(current_value, previous_value, index_type):
     
     return f"{index_type.upper()} values recorded."
 
+def get_evalscript_for_index(index_type):
+    """Generate evalscript with proper color mapping for each index type"""
+    # Base evalscript template with enhanced color mapping
+    evalscript_template = """
+//VERSION=3
+function setup() {
+    return {
+        input: [%INPUT_BANDS%],
+        output: [
+            { id: "default", bands: 4 },  // RGBA color image
+            { id: "index_values", bands: 1, sampleType: "FLOAT32" }  // Raw index values
+        ]
+    };
+}
+
+function evaluatePixel(samples) {
+    // Calculate index
+    %INDEX_CALCULATION%
+    
+    // Generate color based on index value
+    let color;
+    let output_value;
+    if (%VALID_DATA_CHECK%) {
+        // Apply index-specific color scale
+        %COLOR_SCALE%
+        output_value = index_value;
+    } else {
+        color = [0, 0, 0, 0]; // Transparent for no data
+        output_value = 0;
+    }
+    
+    return {
+        default: color,
+        index_values: [output_value]
+    };
+}
+"""
+
+    # Define color scales and parameters for each index type
+    index_params = {
+        'ndvi': {
+            'input_bands': '"B04", "B08", "dataMask"',
+            'calculation': 'const index_value = (samples.B08 - samples.B04) / (samples.B08 + samples.B04 + 0.0001);',
+            'valid_check': 'samples.dataMask === 1',
+            'color_scale': """
+                // NDVI typically ranges from -1 to 1, but for vegetation we focus on 0-1
+                if (index_value < 0) {
+                    color = [0.5, 0.5, 0.5, 1]; // Gray for non-vegetation
+                } else if (index_value < 0.2) {
+                    color = [0.8, 0.2, 0.2, 1]; // Red - sparse vegetation
+                } else if (index_value < 0.4) {
+                    color = [0.9, 0.6, 0.2, 1]; // Orange - moderate vegetation
+                } else if (index_value < 0.6) {
+                    color = [0.9, 0.9, 0.2, 1]; // Yellow - healthy vegetation
+                } else if (index_value < 0.8) {
+                    color = [0.2, 0.7, 0.2, 1]; // Green - very healthy vegetation
+                } else {
+                    color = [0.1, 0.3, 0.1, 1]; // Dark green - dense vegetation
+                }
+            """
+        },
+        'reci': {
+            'input_bands': '"B05", "B08", "dataMask"',
+            'calculation': 'const index_value = (samples.B08 / samples.B05) - 1;',
+            'valid_check': 'samples.dataMask === 1 && samples.B05 > 0',
+            'color_scale': """
+                // RECI typically ranges from 0-10 for vegetation
+                if (index_value < 1) {
+                    color = [0.8, 0.2, 0.2, 1]; // Red - low chlorophyll
+                } else if (index_value < 3) {
+                    color = [0.9, 0.6, 0.2, 1]; // Orange
+                } else if (index_value < 5) {
+                    color = [0.9, 0.9, 0.2, 1]; // Yellow
+                } else if (index_value < 7) {
+                    color = [0.2, 0.7, 0.2, 1]; // Green
+                } else {
+                    color = [0.1, 0.3, 0.1, 1]; // Dark green - high chlorophyll
+                }
+            """
+        },
+        'ndmi': {
+            'input_bands': '"B08", "B11", "dataMask"',
+            'calculation': 'const index_value = (samples.B08 - samples.B11) / (samples.B08 + samples.B11 + 0.0001);',
+            'valid_check': 'samples.dataMask === 1',
+            'color_scale': """
+                // NDMI ranges from -1 to 1, water content focus
+                if (index_value < -0.5) {
+                    color = [0.8, 0.1, 0.1, 1]; // Red - severe water stress
+                } else if (index_value < -0.2) {
+                    color = [0.9, 0.5, 0.2, 1]; // Orange - moderate stress
+                } else if (index_value < 0) {
+                    color = [0.9, 0.9, 0.2, 1]; // Yellow - mild stress
+                } else if (index_value < 0.2) {
+                    color = [0.2, 0.7, 0.2, 1]; // Green - adequate water
+                } else if (index_value < 0.4) {
+                    color = [0.1, 0.5, 0.8, 1]; // Blue - good water content
+                } else {
+                    color = [0.1, 0.2, 0.9, 1]; // Dark blue - high water content
+                }
+            """
+        },
+        'ndre': {
+            'input_bands': '"B05", "B08", "dataMask"',
+            'calculation': 'const index_value = (samples.B08 - samples.B05) / (samples.B08 + samples.B05 + 0.0001);',
+            'valid_check': 'samples.dataMask === 1',
+            'color_scale': """
+                // NDRE ranges from -1 to 1, nitrogen focus
+                if (index_value < 0) {
+                    color = [0.8, 0.2, 0.2, 1]; // Red - low nitrogen
+                } else if (index_value < 0.2) {
+                    color = [0.9, 0.6, 0.2, 1]; // Orange
+                } else if (index_value < 0.4) {
+                    color = [0.9, 0.9, 0.2, 1]; // Yellow
+                } else if (index_value < 0.6) {
+                    color = [0.2, 0.7, 0.2, 1]; // Green
+                } else {
+                    color = [0.1, 0.3, 0.1, 1]; // Dark green - high nitrogen
+                }
+            """
+        },
+        'msavi': {
+            'input_bands': '"B04", "B08", "dataMask"',
+            'calculation': '''
+                const NIR = samples.B08;
+                const RED = samples.B04;
+                const index_value = (2 * NIR + 1 - Math.sqrt((2 * NIR + 1) * (2 * NIR + 1) - 8 * (NIR - RED))) / 2;
+            ''',
+            'valid_check': 'samples.dataMask === 1',
+            'color_scale': """
+                // MSAVI ranges from -1 to 1, soil-adjusted vegetation
+                if (index_value < 0) {
+                    color = [0.5, 0.5, 0.5, 1]; // Gray - bare soil
+                } else if (index_value < 0.2) {
+                    color = [0.8, 0.2, 0.2, 1]; // Red - sparse
+                } else if (index_value < 0.4) {
+                    color = [0.9, 0.6, 0.2, 1]; // Orange
+                } else if (index_value < 0.6) {
+                    color = [0.9, 0.9, 0.2, 1]; // Yellow
+                } else if (index_value < 0.8) {
+                    color = [0.2, 0.7, 0.2, 1]; // Green
+                } else {
+                    color = [0.1, 0.3, 0.1, 1]; // Dark green
+                }
+            """
+        }
+    }
+
+    # Get parameters for the requested index type, default to NDVI if unknown
+    params = index_params.get(index_type.lower(), index_params['ndvi'])
+    
+    # Replace placeholders in template
+    evalscript = evalscript_template
+    evalscript = evalscript.replace('%INPUT_BANDS%', params['input_bands'])
+    evalscript = evalscript.replace('%INDEX_CALCULATION%', params['calculation'])
+    evalscript = evalscript.replace('%VALID_DATA_CHECK%', params['valid_check'])
+    evalscript = evalscript.replace('%COLOR_SCALE%', params['color_scale'])
+    
+    return evalscript
+
+
 @app.route('/fetch-and-store-crop-data', methods=['POST'])
 def fetch_and_store_crop_data():
-    """Fetch satellite data and store it for specific farmer and farm"""
+    """Fetch satellite data with colored images and store it"""
     try:
         data = request.json
         farmer_id = data.get('farmer_id')
@@ -376,7 +536,7 @@ def fetch_and_store_crop_data():
         
         time_interval = (start_date.isoformat(), end_date.isoformat())
         
-        # Fetch different indices
+        # Fetch different indices with colored images
         indices_to_fetch = ['ndvi', 'reci', 'ndmi']
         results = {}
         
@@ -405,11 +565,12 @@ def fetch_and_store_crop_data():
                 sh_data = request_sh.get_data()
                 
                 if sh_data:
+                    # Extract the colored image and index values
                     if isinstance(sh_data, list) and len(sh_data) >= 2:
-                        image_data = sh_data[0]
+                        colored_image = sh_data[0]  # Already colored by the evalscript
                         index_values = sh_data[1]
                     elif isinstance(sh_data, list) and len(sh_data) == 1 and isinstance(sh_data[0], dict):
-                        image_data = sh_data[0].get('default.png')
+                        colored_image = sh_data[0].get('default.png')
                         index_values = sh_data[0].get('index_values.tif')
                     else:
                         continue
@@ -420,12 +581,12 @@ def fetch_and_store_crop_data():
                     
                     if valid_values.size > 0:
                         average_value = float(np.mean(valid_values))
-                        # Convert image to base64
-                        image_base64 = numpy_to_base64_image(np.array(image_data))
+                        # Convert the already-colored image to base64
+                        image_base64 = numpy_to_base64_image(np.array(colored_image))
                         
                         results[index_type] = {
                             'value': average_value,
-                            'image': image_base64
+                            'image': image_base64  # This image already has the color scale applied
                         }
                 
             except Exception as e:
@@ -463,18 +624,18 @@ def fetch_and_store_crop_data():
         
         record.growth_stage = calculate_growth_stage(record.sowing_date, end_date)
         
-        # Store index values and images
+        # Store index values and pre-colored images
         if 'ndvi' in results:
             record.ndvi_value = results['ndvi']['value']
-            record.ndvi_image = results['ndvi']['image']
+            record.ndvi_image = results['ndvi']['image']  # Already colored
         
         if 'reci' in results:
             record.reci_value = results['reci']['value']
-            record.reci_image = results['reci']['image']
+            record.reci_image = results['reci']['image']  # Already colored
         
         if 'ndmi' in results:
             record.ndmi_value = results['ndmi']['value']
-            record.ndmi_image = results['ndmi']['image']
+            record.ndmi_image = results['ndmi']['image']  # Already colored
         
         # Store weather data
         record.precipitation = weather.get('precipitation')
@@ -503,10 +664,11 @@ def fetch_and_store_crop_data():
         logger.exception("Error in fetch_and_store_crop_data")
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)})
-        
+
+
 @app.route('/report/<int:farmer_id>/<farm_id>', methods=['GET'])
 def generate_crop_report(farmer_id, farm_id):
-    """Generate comprehensive crop monitoring report"""
+    """Generate comprehensive crop monitoring report with pre-colored images"""
     try:
         # Get the two most recent records for comparison
         records = CropMonitoringRecord.query.filter_by(
@@ -552,7 +714,7 @@ def generate_crop_report(farmer_id, farm_id):
             )
         }
         
-        # Build report structure similar to the uploaded sample
+        # Build report structure
         report = {
             'status': 'success',
             'report_date': current_record.image_date.strftime('%d %b %Y'),
@@ -599,13 +761,13 @@ def generate_crop_report(farmer_id, farm_id):
                 'ndmi': round(previous_record.ndmi_value, 2) if previous_record.ndmi_value else 'N/A'
             }
         
-        # Add images if requested
+        # Add pre-colored images if requested
         include_images = request.args.get('include_images', 'false').lower() == 'true'
         if include_images:
             report['images'] = {
-                'ndvi': current_record.ndvi_image,
-                'reci': current_record.reci_image,
-                'ndmi': current_record.ndmi_image
+                'ndvi': current_record.ndvi_image,  # Already colored
+                'reci': current_record.reci_image,  # Already colored
+                'ndmi': current_record.ndmi_image   # Already colored
             }
         
         return jsonify(report)
