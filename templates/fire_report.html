@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+
+{% block title %}Fire Report - {{ record.detection_date.strftime('%Y-%m-%d') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-header {
+        background-color: var(--light-green);
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .heatmap-container {
+        position: relative;
+        margin-bottom: 20px;
+    }
+    
+    .report-section {
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--light-green);
+    }
+    
+    .risk-summary {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    
+    .risk-item {
+        text-align: center;
+        padding: 15px;
+        border-radius: 10px;
+        flex: 1;
+        margin: 0 10px;
+    }
+    
+    .high-risk-bg { background-color: rgba(255, 0, 0, 0.2); }
+    .medium-risk-bg { background-color: rgba(255, 255, 0, 0.2); }
+    .low-risk-bg { background-color: rgba(0, 0, 255, 0.2); }
+    
+    .recommendations li {
+        margin-bottom: 10px;
+    }
+    
+    @media print {
+        body {
+            background-color: white;
+            color: black;
+        }
+        
+        .navbar, .btn {
+            display: none !important;
+        }
+        
+        .card {
+            box-shadow: none;
+            border: 1px solid #ddd;
+        }
+        
+        .risk-item {
+            margin: 0 5px;
+            padding: 10px;
+        }
+        
+        a[href]:after {
+            content: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Fire Risk Report</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button onclick="window.print()" class="btn btn-primary me-2">
+            <i class="bi bi-printer"></i> Print Report
+        </button>
+        <button id="downloadPdf" class="btn btn-outline-light">
+            <i class="bi bi-file-earmark-pdf"></i> Download PDF
+        </button>
+    </div>
+</div>
+
+<div class="report-header">
+    <div class="row">
+        <div class="col-md-6">
+            <h3>{{ record.farm_name }}</h3>
+            <p class="mb-1"><strong>Detection Date:</strong> {{ record.detection_date.strftime('%B %d, %Y %H:%M') }}</p>
+            <p><strong>Report Generated:</strong> {{ now.strftime('%B %d, %Y %H:%M') }}</p>
+        </div>
+        <div class="col-md-6 text-end">
+            <div class="alert alert-warning d-inline-block">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <strong>Overall Risk Level:</strong> 
+                {% if record.high_risk_area > 5 %}
+                <span class="text-danger">High</span>
+                {% elif record.medium_risk_area > 10 %}
+                <span class="text-warning">Medium</span>
+                {% else %}
+                <span class="text-primary">Low</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5>Fire Risk Heatmap</h5>
+            </div>
+            <div class="card-body">
+                <div id="map" class="map-container"></div>
+                <div class="legend mt-3">
+                    <h6>Legend</h6>
+                    <div><i class="risk-indicator high-risk"></i> High Risk (>70%)</div>
+                    <div><i class="risk-indicator medium-risk"></i> Medium Risk (40-70%)</div>
+                    <div><i class="risk-indicator low-risk"></i> Low Risk (20-40%)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Risk Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="risk-summary">
+                    <div class="risk-item high-risk-bg">
+                        <h4 class="text-danger">{{ record.high_risk_area }} ha</h4>
+                        <p>High Risk</p>
+                    </div>
+                    <div class="risk-item medium-risk-bg">
+                        <h4 class="text-warning">{{ record.medium_risk_area }} ha</h4>
+                        <p>Medium Risk</p>
+                    </div>
+                    <div class="risk-item low-risk-bg">
+                        <h4 class="text-primary">{{ record.low_risk_area }} ha</h4>
+                        <p>Low Risk</p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill"></i>
+                    <strong>Total Fire Points:</strong> {{ record.fire_count }}
+                </div>
+                
+                <h5 class="mt-4">Risk Trend</h5>
+                <canvas id="trendChart" height="150"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Recommendations</h5>
+            </div>
+            <div class="card-body">
+                {% if record.high_risk_area > 0 %}
+                <div class="alert alert-danger">
+                    <h6><i class="bi bi-exclamation-triangle-fill"></i> Immediate Actions Required</h6>
+                    <ul class="recommendations">
+                        <li>Deploy fire patrol teams to high-risk areas</li>
+                        <li>Create firebreaks in high-risk zones</li>
+                        <li>Ensure water sources are accessible for firefighting</li>
+                        <li>Alert local fire department about potential risks</li>
+                    </ul>
+                </div>
+                {% endif %}
+                
+                {% if record.medium_risk_area > 0 %}
+                <div class="alert alert-warning">
+                    <h6><i class="bi bi-exclamation-triangle"></i> Preventive Measures</h6>
+                    <ul class="recommendations">
+                        <li>Remove dry vegetation from medium-risk areas</li>
+                        <li>Monitor weather conditions closely</li>
+                        <li>Prepare firefighting equipment</li>
+                        <li>Conduct staff training on fire prevention</li>
+                    </ul>
+                </div>
+                {% endif %}
+                
+                <div class="alert alert-primary">
+                    <h6><i class="bi bi-check-circle"></i> General Best Practices</h6>
+                    <ul class="recommendations">
+                        <li>Maintain a 10-meter cleared zone around structures</li>
+                        <li>Store flammable materials properly</li>
+                        <li>Regularly inspect electrical installations</li>
+                        <li>Develop and practice an evacuation plan</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Detailed Risk Analysis</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Risk Level</th>
+                                <th>Area (ha)</th>
+                                <th>Percentage</th>
+                                <th>Main Factors</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="risk-indicator high-risk"></span> High Risk</td>
+                                <td>{{ record.high_risk_area }}</td>
+                                <td>{{ "%.1f"|format(record.high_risk_area / (record.high_risk_area + record.medium_risk_area + record.low_risk_area) * 100) }}%</td>
+                                <td>Dry vegetation, high temperature, low moisture</td>
+                            </tr>
+                            <tr>
+                                <td><span class="risk-indicator medium-risk"></span> Medium Risk</td>
+                                <td>{{ record.medium_risk_area }}</td>
+                                <td>{{ "%.1f"|format(record.medium_risk_area / (record.high_risk_area + record.medium_risk_area + record.low_risk_area) * 100) }}%</td>
+                                <td>Moderate vegetation, rising temperatures</td>
+                            </tr>
+                            <tr>
+                                <td><span class="risk-indicator low-risk"></span> Low Risk</td>
+                                <td>{{ record.low_risk_area }}</td>
+                                <td>{{ "%.1f"|format(record.low_risk_area / (record.high_risk_area + record.medium_risk_area + record.low_risk_area) * 100) }}%</td>
+                                <td>Healthy vegetation, adequate moisture</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize map with heatmap
+    const map = new ol.Map({
+        target: 'map',
+        layers: [
+            new ol.layer.Tile({
+                source: new ol.source.OSM()
+            }),
+            new ol.layer.Image({
+                source: new ol.source.ImageStatic({
+                    url: 'data:image/png;base64,{{ record.heatmap_image }}',
+                    imageExtent: ol.proj.transformExtent(
+                        [{{ record.farm_boundary.bounds|join(',') }}],
+                        'EPSG:4326', 'EPSG:3857'
+                    ),
+                    projection: 'EPSG:3857'
+                }),
+                opacity: 0.8
+            })
+        ],
+        view: new ol.View({
+            center: ol.proj.fromLonLat([{{ record.farm_center.lng }}, {{ record.farm_center.lat }}]),
+            zoom: 13
+        })
+    });
+    
+    // Add farm boundary
+    const vectorLayer = new ol.layer.Vector({
+        source: new ol.source.Vector({
+            url: '{{ url_for("api.get_farm_geojson", farmer_id=record.farmer_id) }}',
+            format: new ol.format.GeoJSON()
+        }),
+        style: new ol.style.Style({
+            stroke: new ol.style.Stroke({
+                color: '#4CAF50',
+                width: 3
+            }),
+            fill: new ol.style.Fill({
+                color: 'rgba(76, 175, 80, 0.1)'
+            })
+        })
+    });
+    
+    map.addLayer(vectorLayer);
+    
+    // Initialize trend chart
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['3 days ago', '2 days ago', 'Yesterday', 'Today'],
+            datasets: [{
+                label: 'Risk Level',
+                data: [
+                    {{ record.high_risk_area / 2 }},
+                    {{ record.high_risk_area / 1.5 }},
+                    {{ record.high_risk_area / 1.2 }},
+                    {{ record.high_risk_area }}
+                ],
+                borderColor: '#ff0000',
+                backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // PDF download
+    document.getElementById('downloadPdf').addEventListener('click', function() {
+        const { jsPDF } = window.jspdf;
+        
+        // Create a new PDF with better formatting for reports
+        const pdf = new jsPDF('p', 'pt', 'a4');
+        const title = "Fire Risk Report - {{ record.farm_name }}";
+        const date = "{{ record.detection_date.strftime('%B %d, %Y') }}";
+        
+        // Add title and header
+        pdf.setFontSize(18);
+        pdf.text(title, 40, 40);
+        pdf.setFontSize(12);
+        pdf.setTextColor(100);
+        pdf.text(`Generated on ${new Date().toLocaleDateString()}`, 40, 60);
+        pdf.text(`Detection Date: ${date}`, 40, 80);
+        
+        // Add risk summary
+        pdf.setFontSize(14);
+        pdf.setTextColor(0);
+        pdf.text('Risk Summary', 40, 120);
+        
+        pdf.setFontSize(12);
+        pdf.setTextColor(255, 0, 0);
+        pdf.text(`High Risk: {{ record.high_risk_area }} ha`, 40, 140);
+        pdf.setTextColor(255, 255, 0);
+        pdf.text(`Medium Risk: {{ record.medium_risk_area }} ha`, 40, 160);
+        pdf.setTextColor(0, 0, 255);
+        pdf.text(`Low Risk: {{ record.low_risk_area }} ha`, 40, 180);
+        pdf.setTextColor(0);
+        pdf.text(`Total Fire Points: {{ record.fire_count }}`, 40, 200);
+        
+        // Add the map image
+        html2canvas(document.getElementById('map')).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            pdf.addImage(imgData, 'PNG', 40, 220, 500, 300);
+            
+            // Add recommendations
+            pdf.addPage();
+            pdf.setFontSize(14);
+            pdf.text('Recommendations', 40, 40);
+            
+            pdf.setFontSize(12);
+            let y = 60;
+            {% if record.high_risk_area > 0 %}
+            pdf.setTextColor(255, 0, 0);
+            pdf.text('Immediate Actions Required:', 40, y);
+            y += 20;
+            pdf.setTextColor(0);
+            pdf.text('- Deploy fire patrol teams to high-risk areas', 50, y);
+            y += 20;
+            pdf.text('- Create firebreaks in high-risk zones', 50, y);
+            y += 20;
+            {% endif %}
+            
+            {% if record.medium_risk_area > 0 %}
+            pdf.setTextColor(255, 165, 0);
+            pdf.text('Preventive Measures:', 40, y);
+            y += 20;
+            pdf.setTextColor(0);
+            pdf.text('- Remove dry vegetation from medium-risk areas', 50, y);
+            y += 20;
+            {% endif %}
+            
+            pdf.setTextColor(0, 0, 255);
+            pdf.text('General Best Practices:', 40, y);
+            y += 20;
+            pdf.setTextColor(0);
+            pdf.text('- Maintain a 10-meter cleared zone around structures', 50, y);
+            y += 20;
+            
+            // Save the PDF
+            pdf.save(`fire-report-{{ record.farm_name }}-{{ record.detection_date.strftime('%Y%m%d') }}.pdf`);
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block title %}Fire Monitoring{% endblock %}
+
+{% block extra_css %}
+<style>
+    .map-controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(26, 62, 26, 0.8);
+        padding: 10px;
+        border-radius: 5px;
+    }
+    
+    .map-controls label {
+        color: white;
+        margin-bottom: 5px;
+        display: block;
+    }
+    
+    .stats-card {
+        transition: all 0.3s ease;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    .recent-events {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Fire Risk Monitoring</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button id="runDetection" class="btn btn-primary me-2">
+            <i class="bi bi-activity"></i> Run Detection
+        </button>
+        <div class="btn-group">
+            <button class="btn btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-download"></i> Export
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" id="exportPdf">PDF Report</a></li>
+                <li><a class="dropdown-item" href="#">GeoJSON Data</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <h5 class="card-title">High Risk Area</h5>
+                <h2 class="text-danger">0 ha</h2>
+                <p class="text-muted">Last detection</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Medium Risk</h5>
+                <h2 class="text-warning">0 ha</h2>
+                <p class="text-muted">Last detection</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Low Risk</h5>
+                <h2 class="text-primary">0 ha</h2>
+                <p class="text-muted">Last detection</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Fire Points</h5>
+                <h2>0</h2>
+                <p class="text-muted">Last 7 days</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Fire Risk Heatmap</h5>
+                <div>
+                    <span class="badge bg-danger me-2">High Risk</span>
+                    <span class="badge bg-warning me-2">Medium Risk</span>
+                    <span class="badge bg-primary">Low Risk</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="map" class="map-container"></div>
+                <div class="map-controls">
+                    <label for="opacity">Heatmap Opacity</label>
+                    <input type="range" id="opacity" min="0" max="1" step="0.1" value="0.7">
+                    
+                    <label for="basemap">Base Map</label>
+                    <select id="basemap" class="form-select form-select-sm">
+                        <option value="osm">OpenStreetMap</option>
+                        <option value="satellite">Satellite</option>
+                        <option value="terrain">Terrain</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Recent Fire Events</h5>
+            </div>
+            <div class="card-body recent-events">
+                {% if records %}
+                <div class="timeline">
+                    {% for record in records %}
+                    <div class="timeline-item">
+                        <h6>{{ record.detection_date.strftime('%d %b %Y') }}</h6>
+                        <p>
+                            <span class="risk-indicator high-risk"></span> {{ record.high_risk_area }} ha high risk<br>
+                            <span class="risk-indicator medium-risk"></span> {{ record.medium_risk_area }} ha medium<br>
+                            <span class="risk-indicator low-risk"></span> {{ record.low_risk_area }} ha low risk
+                        </p>
+                        <a href="{{ url_for('fire_report', record_id=record.id) }}" class="btn btn-sm btn-outline-light">
+                            View Details
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-exclamation-circle fs-1 text-muted"></i>
+                    <p class="mt-2">No fire detection records found</p>
+                    <button id="runFirstDetection" class="btn btn-primary mt-2">
+                        Run First Detection
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Fire Risk Statistics</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="riskChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Required libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+    // Initialize map
+    const center = {{ center|tojson }};
+    const geojson = {{ geojson|safe }};
+    
+    const map = new ol.Map({
+        target: 'map',
+        layers: [
+            new ol.layer.Tile({
+                source: new ol.source.OSM()
+            })
+        ],
+        view: new ol.View({
+            center: ol.proj.fromLonLat([center.lng, center.lat]),
+            zoom: 12
+        })
+    });
+    
+    // Add farm boundary
+    const vectorSource = new ol.source.Vector({
+        features: (new ol.format.GeoJSON()).readFeatures(geojson)
+    });
+    
+    const vectorLayer = new ol.layer.Vector({
+        source: vectorSource,
+        style: new ol.style.Style({
+            stroke: new ol.style.Stroke({
+                color: '#4CAF50',
+                width: 3
+            }),
+            fill: new ol.style.Fill({
+                color: 'rgba(76, 175, 80, 0.1)'
+            })
+        })
+    });
+    
+    map.addLayer(vectorLayer);
+    
+    // Declare heatmapLayer variable
+    let heatmapLayer = null;
+    
+    // Add heatmap if available
+    {% if records and records[0].heatmap_image %}
+    heatmapLayer = new ol.layer.Image({
+        source: new ol.source.ImageStatic({
+            url: 'data:image/png;base64,{{ records[0].heatmap_image }}',
+            imageExtent: vectorSource.getExtent(),
+            projection: 'EPSG:3857'
+        }),
+        opacity: 0.7
+    });
+    
+    map.addLayer(heatmapLayer);
+    
+    // Update stats
+    document.querySelector('.text-danger').textContent = {{ records[0].high_risk_area|tojson }} + ' ha';
+    document.querySelector('.text-warning').textContent = {{ records[0].medium_risk_area|tojson }} + ' ha';
+    document.querySelector('.text-primary').textContent = {{ records[0].low_risk_area|tojson }} + ' ha';
+    document.querySelector('h2:last-child').textContent = {{ records[0].fire_count|tojson }};
+    {% endif %}
+    
+    // Map controls
+    document.getElementById('opacity').addEventListener('input', function(e) {
+        if (heatmapLayer) {
+            heatmapLayer.setOpacity(parseFloat(e.target.value));
+        }
+    });
+    
+    document.getElementById('basemap').addEventListener('change', function(e) {
+        let source;
+        switch(e.target.value) {
+            case 'satellite':
+                source = new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                });
+                break;
+            case 'terrain':
+                source = new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}'
+                });
+                break;
+            default:
+                source = new ol.source.OSM();
+        }
+        
+        map.getLayers().item(0).setSource(source);
+    });
+    
+    // Run detection
+    document.getElementById('runDetection').addEventListener('click', function() {
+        fetch('/api/detect-fires', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                farmer_id: {{ farmer_id }},
+                farm_id: {{ farm_id }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred');
+        });
+    });
+    
+    // Add event listener for runFirstDetection button if it exists
+    const runFirstDetectionBtn = document.getElementById('runFirstDetection');
+    if (runFirstDetectionBtn) {
+        runFirstDetectionBtn.addEventListener('click', function() {
+            document.getElementById('runDetection').click();
+        });
+    }
+    
+    // Export to PDF
+    document.getElementById('exportPdf').addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        // Check if libraries are loaded
+        if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
+            alert('PDF export libraries are still loading. Please try again in a moment.');
+            return;
+        }
+        
+        // Use html2canvas and jsPDF to generate PDF
+        const { jsPDF } = window.jspdf;
+        
+        html2canvas(document.querySelector('.card')).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save('fire-monitoring-report.pdf');
+        }).catch(error => {
+            console.error('Error generating PDF:', error);
+            alert('Error generating PDF. Please try again.');
+        });
+    });
+    
+    // Wait for Chart.js to load before initializing chart
+    function initializeChart() {
+        if (typeof Chart === 'undefined') {
+            setTimeout(initializeChart, 100);
+            return;
+        }
+        
+        // Initialize chart
+        const ctx = document.getElementById('riskChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [
+                    {% for record in records %}
+                    "{{ record.detection_date.strftime('%d %b') }}"{% if not loop.last %},{% endif %}
+                    {% endfor %}
+                ],
+                datasets: [
+                    {
+                        label: 'High Risk Area',
+                        data: [
+                            {% for record in records %}
+                            {{ record.high_risk_area }}{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                        ],
+                        borderColor: '#ff0000',
+                        backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'Medium Risk Area',
+                        data: [
+                            {% for record in records %}
+                            {{ record.medium_risk_area }}{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                        ],
+                        borderColor: '#ffff00',
+                        backgroundColor: 'rgba(255, 255, 0, 0.1)',
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'Low Risk Area',
+                        data: [
+                            {% for record in records %}
+                            {{ record.low_risk_area }}{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                        ],
+                        borderColor: '#0000ff',
+                        backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                        tension: 0.3,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: '#e8f5e8'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(200, 200, 200, 0.1)'
+                        },
+                        ticks: {
+                            color: '#e8f5e8'
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(200, 200, 200, 0.1)'
+                        },
+                        ticks: {
+                            color: '#e8f5e8'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Initialize chart when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeChart);
+    } else {
+        initializeChart();
+    }
+</script>
+{% endblock %}
