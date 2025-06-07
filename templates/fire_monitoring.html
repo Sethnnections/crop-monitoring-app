@@ -1,425 +1,1479 @@
-{% extends "base.html" %}
-
-{% block title %}Fire Monitoring{% endblock %}
-
-{% block extra_css %}
-<style>
-    .map-controls {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 1000;
-        background: rgba(26, 62, 26, 0.8);
-        padding: 10px;
-        border-radius: 5px;
-    }
-    
-    .map-controls label {
-        color: white;
-        margin-bottom: 5px;
-        display: block;
-    }
-    
-    .stats-card {
-        transition: all 0.3s ease;
-    }
-    
-    .stats-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
-    }
-    
-    .recent-events {
-        max-height: 400px;
-        overflow-y: auto;
-    }
-</style>
-{% endblock %}
-
-{% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Fire Risk Monitoring</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <button id="runDetection" class="btn btn-primary me-2">
-            <i class="bi bi-activity"></i> Run Detection
-        </button>
-        <div class="btn-group">
-            <button class="btn btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
-                <i class="bi bi-download"></i> Export
-            </button>
-            <ul class="dropdown-menu">
-                <li><a class="dropdown-item" href="#" id="exportPdf">PDF Report</a></li>
-                <li><a class="dropdown-item" href="#">GeoJSON Data</a></li>
-            </ul>
-        </div>
-    </div>
-</div>
-
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body text-center">
-                <h5 class="card-title">High Risk Area</h5>
-                <h2 class="text-danger">0 ha</h2>
-                <p class="text-muted">Last detection</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Medium Risk</h5>
-                <h2 class="text-warning">0 ha</h2>
-                <p class="text-muted">Last detection</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Low Risk</h5>
-                <h2 class="text-primary">0 ha</h2>
-                <p class="text-muted">Last detection</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card stats-card">
-            <div class="card-body text-center">
-                <h5 class="card-title">Fire Points</h5>
-                <h2>0</h2>
-                <p class="text-muted">Last 7 days</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5>Fire Risk Heatmap</h5>
-                <div>
-                    <span class="badge bg-danger me-2">High Risk</span>
-                    <span class="badge bg-warning me-2">Medium Risk</span>
-                    <span class="badge bg-primary">Low Risk</span>
-                </div>
-            </div>
-            <div class="card-body">
-                <div id="map" class="map-container"></div>
-                <div class="map-controls">
-                    <label for="opacity">Heatmap Opacity</label>
-                    <input type="range" id="opacity" min="0" max="1" step="0.1" value="0.7">
-                    
-                    <label for="basemap">Base Map</label>
-                    <select id="basemap" class="form-select form-select-sm">
-                        <option value="osm">OpenStreetMap</option>
-                        <option value="satellite">Satellite</option>
-                        <option value="terrain">Terrain</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <h5>Recent Fire Events</h5>
-            </div>
-            <div class="card-body recent-events">
-                {% if records %}
-                <div class="timeline">
-                    {% for record in records %}
-                    <div class="timeline-item">
-                        <h6>{{ record.detection_date.strftime('%d %b %Y') }}</h6>
-                        <p>
-                            <span class="risk-indicator high-risk"></span> {{ record.high_risk_area }} ha high risk<br>
-                            <span class="risk-indicator medium-risk"></span> {{ record.medium_risk_area }} ha medium<br>
-                            <span class="risk-indicator low-risk"></span> {{ record.low_risk_area }} ha low risk
-                        </p>
-                        <a href="{{ url_for('fire_report', record_id=record.id) }}" class="btn btn-sm btn-outline-light">
-                            View Details
-                        </a>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="text-center py-4">
-                    <i class="bi bi-exclamation-circle fs-1 text-muted"></i>
-                    <p class="mt-2">No fire detection records found</p>
-                    <button id="runFirstDetection" class="btn btn-primary mt-2">
-                        Run First Detection
-                    </button>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5>Fire Risk Statistics</h5>
-            </div>
-            <div class="card-body">
-                <canvas id="riskChart" height="100"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<!-- Required libraries -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-<script>
-    // Initialize map
-    const center = {{ center|tojson }};
-    const geojson = {{ geojson|safe }};
-    
-    const map = new ol.Map({
-        target: 'map',
-        layers: [
-            new ol.layer.Tile({
-                source: new ol.source.OSM()
-            })
-        ],
-        view: new ol.View({
-            center: ol.proj.fromLonLat([center.lng, center.lat]),
-            zoom: 12
-        })
-    });
-    
-    // Add farm boundary
-    const vectorSource = new ol.source.Vector({
-        features: (new ol.format.GeoJSON()).readFeatures(geojson)
-    });
-    
-    const vectorLayer = new ol.layer.Vector({
-        source: vectorSource,
-        style: new ol.style.Style({
-            stroke: new ol.style.Stroke({
-                color: '#4CAF50',
-                width: 3
-            }),
-            fill: new ol.style.Fill({
-                color: 'rgba(76, 175, 80, 0.1)'
-            })
-        })
-    });
-    
-    map.addLayer(vectorLayer);
-    
-    // Declare heatmapLayer variable
-    let heatmapLayer = null;
-    
-    // Add heatmap if available
-    {% if records and records[0].heatmap_image %}
-    heatmapLayer = new ol.layer.Image({
-        source: new ol.source.ImageStatic({
-            url: 'data:image/png;base64,{{ records[0].heatmap_image }}',
-            imageExtent: vectorSource.getExtent(),
-            projection: 'EPSG:3857'
-        }),
-        opacity: 0.7
-    });
-    
-    map.addLayer(heatmapLayer);
-    
-    // Update stats
-    document.querySelector('.text-danger').textContent = {{ records[0].high_risk_area|tojson }} + ' ha';
-    document.querySelector('.text-warning').textContent = {{ records[0].medium_risk_area|tojson }} + ' ha';
-    document.querySelector('.text-primary').textContent = {{ records[0].low_risk_area|tojson }} + ' ha';
-    document.querySelector('h2:last-child').textContent = {{ records[0].fire_count|tojson }};
-    {% endif %}
-    
-    // Map controls
-    document.getElementById('opacity').addEventListener('input', function(e) {
-        if (heatmapLayer) {
-            heatmapLayer.setOpacity(parseFloat(e.target.value));
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Monitoring Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+      <style>
+        :root {
+            /* Updated to green gradients */
+            --primary-gradient: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            --danger-gradient: linear-gradient(135deg, #58d68d 0%, #48c9b0 100%);
+            --success-gradient: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            --high-risk-gradient: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            --medium-risk-gradient: linear-gradient(135deg, #58d68d 0%, #52c41a 100%);
+            --low-risk-gradient: linear-gradient(135deg, #a8e6cf 0%, #7fcdcd 100%);
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+            --shadow-lg: 0 10px 25px rgba(0,0,0,0.1), 0 5px 10px rgba(0,0,0,0.05);
+            --shadow-xl: 0 20px 40px rgba(0,0,0,0.15), 0 10px 10px rgba(0,0,0,0.05);
+            --transition-base: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            --transition-slow: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
-    });
-    
-    document.getElementById('basemap').addEventListener('change', function(e) {
-        let source;
-        switch(e.target.value) {
-            case 'satellite':
-                source = new ol.source.XYZ({
-                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                });
-                break;
-            case 'terrain':
-                source = new ol.source.XYZ({
-                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}'
-                });
-                break;
-            default:
-                source = new ol.source.OSM();
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        
-        map.getLayers().item(0).setSource(source);
-    });
-    
-    // Run detection
-    document.getElementById('runDetection').addEventListener('click', function() {
-        fetch('/api/detect-fires', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                farmer_id: {{ farmer_id }},
-                farm_id: {{ farm_id }}
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                window.location.reload();
-            } else {
-                alert('Error: ' + data.message);
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+            min-height: 100vh;
+            color: #2c3e50;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: var(--shadow-md);
+            border-bottom: 3px solid #27ae60;
+            position: relative;
+            z-index: 100;
+            transition: var(--transition-base);
+        }
+
+        .header:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header .subtitle {
+            color: #7f8c8d;
+            margin-top: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 2rem;
+            height: calc(100vh - 150px);
+        }
+
+        .sidebar {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: var(--shadow-lg);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transition: var(--transition-base);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .sidebar:hover {
+            box-shadow: var(--shadow-xl);
+            transform: translateY(-2px);
+        }
+
+        .map-container {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            transition: var(--transition-base);
+            border: 1px solid rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .map-container:hover {
+            box-shadow: var(--shadow-xl);
+            transform: translateY(-2px);
+        }
+
+        #map {
+            height: 100%;
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition-base);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        #map:hover {
+            box-shadow: var(--shadow-md);
+        }
+
+        .control-section {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid rgba(0,0,0,0.05);
+            transition: var(--transition-base);
+        }
+
+        .control-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: var(--transition-base);
+        }
+
+        .section-title i {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(46, 204, 113, 0.1);
+            border-radius: 8px;
+            color: #27ae60;
+            transition: var(--transition-base);
+        }
+
+        .farm-selector {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            border: 2px solid rgba(0,0,0,0.08);
+            border-radius: 12px;
+            background: white;
+            font-size: 0.95rem;
+            transition: var(--transition-base);
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1rem;
+        }
+
+        .farm-selector:focus {
+            outline: none;
+            border-color: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.2);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition-base);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.2);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+
+        .btn:hover::after {
+            transform: translateX(0);
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(46, 204, 113, 0.4);
+        }
+
+        .btn-danger {
+            background: var(--danger-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(88, 214, 141, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(88, 214, 141, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .status-card {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 14px;
+            margin-bottom: 1rem;
+            text-align: center;
+            box-shadow: var(--shadow-md);
+            transition: var(--transition-base);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                to bottom right,
+                rgba(255,255,255,0.3) 0%,
+                rgba(255,255,255,0) 60%
+            );
+            transform: rotate(30deg);
+            pointer-events: none;
+        }
+
+        .status-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .status-card h3 {
+            margin-bottom: 0.75rem;
+            font-size: 1.1rem;
+            position: relative;
+        }
+
+        .status-card .status-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            position: relative;
+        }
+
+        .risk-indicators {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .risk-indicator {
+            text-align: center;
+            padding: 1rem;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition-base);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 90px;
+        }
+
+        .risk-indicator:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .risk-high {
+            background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+        }
+
+        .risk-medium {
+            background: var(--medium-risk-gradient);
+        }
+
+        .risk-low {
+            background: var(--low-risk-gradient);
+        }
+
+        .risk-indicator .value {
+            display: block;
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .risk-indicator .label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        .recent-records {
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .recent-records::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .recent-records::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.05);
+            border-radius: 10px;
+        }
+
+        .recent-records::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+        }
+
+        .recent-records::-webkit-scrollbar-thumb:hover {
+            background: rgba(0,0,0,0.2);
+        }
+
+        .record-item {
+            background: #f8f9fa;
+            padding: 1.25rem;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            border-left: 4px solid #27ae60;
+            transition: var(--transition-base);
+            box-shadow: var(--shadow-sm);
+            cursor: pointer;
+        }
+
+        .record-item:hover {
+            transform: translateX(5px);
+            box-shadow: var(--shadow-md);
+            background: white;
+        }
+
+        .record-date {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .record-date::before {
+            content: '\f073';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 400;
+            font-size: 0.9rem;
+            color: #7f8c8d;
+        }
+
+        .record-stats {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .record-stats span {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .record-stats span::before {
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            font-size: 0.8rem;
+        }
+
+        .record-stats span:nth-child(1)::before {
+            content: '\f1ad';
+        }
+
+        .record-stats span:nth-child(2)::before {
+            content: '\f06d';
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #27ae60;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .loading i {
+            font-size: 2rem;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .legend {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+            z-index: 1000;
+            transition: var(--transition-base);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .legend:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .legend h4 {
+            margin-bottom: 0.8rem;
+            color: #2c3e50;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend h4::before {
+            content: '\f05b';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            font-size: 0.9rem;
+            color: #27ae60;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            gap: 0.8rem;
+        }
+
+        .legend-color {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Green shades for legend colors */
+        .legend-color.high-risk {
+            background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+        }
+
+        .legend-color.medium-risk {
+            background: linear-gradient(135deg, #73d13d 0%, #52c41a 100%);
+        }
+
+        .legend-color.low-risk {
+            background: linear-gradient(135deg, #95de64 0%, #73d13d 100%);
+        }
+
+        .legend-color.very-low-risk {
+            background: linear-gradient(135deg, #b7eb8f 0%, #95de64 100%);
+        }
+
+        .alert {
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            box-shadow: var(--shadow-sm);
+            animation: fadeInUp 0.5s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .alert::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(0,0,0,0.1);
+        }
+
+        .alert i {
+            font-size: 1.2rem;
+        }
+
+        .alert-danger {
+            background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+            color: white;
+        }
+
+        .alert-success {
+            background: var(--success-gradient);
+            color: white;
+        }
+
+        .temperature-display {
+            background: linear-gradient(135deg, #73d13d 0%, #52c41a 100%);
+            color: white;
+            padding: 1.25rem;
+            border-radius: 14px;
+            text-align: center;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow-md);
+            transition: var(--transition-base);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .temperature-display:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .temperature-display::before {
+            content: '\f185';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 2.5rem;
+            opacity: 0.1;
+        }
+
+        .temperature-display div:first-child {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            position: relative;
+        }
+
+        .temperature-display .temp-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            position: relative;
+        }
+
+        .farm-boundary-highlight {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                stroke-width: 3px;
+                opacity: 0.8;
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred');
+            50% {
+                stroke-width: 5px;
+                opacity: 1;
+            }
+            100% {
+                stroke-width: 3px;
+                opacity: 0.8;
+            }
+        }
+
+        .heatmap-overlay {
+            mix-blend-mode: multiply;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+
+        .heatmap-overlay:hover {
+            opacity: 0.9;
+        }
+
+        .map-tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            pointer-events: none;
+            z-index: 1000;
+            transform: translate(-50%, -100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .map-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 6px;
+            border-style: solid;
+            border-color: rgba(0,0,0,0.7) transparent transparent transparent;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: white;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 320px 1fr;
+                gap: 1.5rem;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+                height: auto;
+                gap: 1.5rem;
+            }
+            
+            .sidebar {
+                order: 2;
+            }
+            
+            .map-container {
+                height: 70vh;
+                order: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.75rem;
+            }
+
+            .container {
+                padding: 0 1rem;
+                margin: 1.5rem auto;
+            }
+
+            .risk-indicators {
+                grid-template-columns: 1fr;
+            }
+
+            .risk-indicator {
+                min-height: auto;
+                padding: 0.75rem;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .animate-bounce {
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateY(0);
+            }
+            40% {
+                transform: translateY(-10px);
+            }
+            60% {
+                transform: translateY(-5px);
+            }
+        }
+    </style>
+   
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-fire"></i> Fire Monitoring Dashboard</h1>
+        <p class="subtitle">Real-time satellite-based fire detection and risk assessment</p>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-seedling"></i>
+                    Farm Selection
+                </h3>
+                <select id="farmSelect" class="farm-selector">
+                    <option value="">Select a farm...</option>
+                </select>
+            </div>
+
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-satellite"></i>
+                    Fire Detection
+                </h3>
+                <button id="detectBtn" class="btn btn-danger" disabled>
+                    <i class="fas fa-search"></i>
+                    Detect Fire Risk
+                </button>
+                <button id="refreshBtn" class="btn btn-primary">
+                    <i class="fas fa-sync"></i>
+                    Refresh Data
+                </button>
+            </div>
+
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-chart-line"></i>
+                    Current Status
+                </h3>
+                <div id="statusDisplay">
+                    <div class="status-card">
+                        <h3>Monitoring Status</h3>
+                        <div class="status-value">Standby</div>
+                        <small>Select a farm to begin monitoring</small>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Risk Assessment
+                </h3>
+                <div id="riskDisplay">
+                    <div class="risk-indicators">
+                        <div class="risk-indicator risk-high">
+                            <span class="value" id="highRisk">0</span>
+                            <span class="label">High Risk (ha)</span>
+                        </div>
+                        <div class="risk-indicator risk-medium">
+                            <span class="value" id="mediumRisk">0</span>
+                            <span class="label">Medium Risk (ha)</span>
+                        </div>
+                        <div class="risk-indicator risk-low">
+                            <span class="value" id="lowRisk">0</span>
+                            <span class="label">Low Risk (ha)</span>
+                        </div>
+                    </div>
+                    <div class="temperature-display">
+                        <div>Average Temperature</div>
+                        <div class="temp-value" id="avgTemp">--°C</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3 class="section-title">
+                    <i class="fas fa-history"></i>
+                    Recent Records
+                </h3>
+                <div id="recentRecords" class="recent-records">
+                    <div class="loading">
+                        <i class="fas fa-spinner"></i>
+                        <p>No records available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="legend">
+                <h4>Fire Risk Legend</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e74c3c;"></div>
+                    <span>High Risk</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f39c12;"></div>
+                    <span>Medium Risk</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3498db;"></div>
+                    <span>Low Risk</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #27ae60;"></div>
+                    <span>Farm Boundary</span>
+                </div>
+            </div>
+            <div id="mapTooltip" class="map-tooltip"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+      class FireMonitoringDashboard {
+    constructor() {
+        this.map = null;
+        this.farmLayers = {};
+        this.heatmapLayer = null;
+        this.currentFarmId = null;
+        // Extract farmer ID from URL (e.g., /fire-monitoring/4)
+        const match = window.location.pathname.match(/fire-monitoring\/(\d+)/);
+        this.currentFarmerId = match ? parseInt(match[1]) : null;
+        this.farms = [];
+        this.mapTooltip = null;
+        this.boundaryHighlight = null;
+        
+        this.initializeMap();
+        this.initializeEventListeners();
+        this.loadFarms();
+        this.loadRecentRecords();
+    }
+
+    initializeMap() {
+        // Initialize map centered on Malawi
+        this.map = L.map('map', {
+            zoomControl: false,
+            fadeAnimation: true,
+            zoomAnimation: true
+        }).setView([-13.254, 34.301], 10);
+
+        // Add zoom control with better position
+        L.control.zoom({
+            position: 'topright'
+        }).addTo(this.map);
+
+        // Add satellite tile layer
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+            maxZoom: 18
+        }).addTo(this.map);
+
+        // Add a streets overlay for better context
+        const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            opacity: 0.3
         });
-    });
-    
-    // Add event listener for runFirstDetection button if it exists
-    const runFirstDetectionBtn = document.getElementById('runFirstDetection');
-    if (runFirstDetectionBtn) {
-        runFirstDetectionBtn.addEventListener('click', function() {
-            document.getElementById('runDetection').click();
+        
+        // Layer control
+        const baseLayers = {
+            "Satellite": this.map._layers[Object.keys(this.map._layers)[0]]
+        };
+        
+        const overlayLayers = {
+            "Streets": streetsLayer
+        };
+        
+        L.control.layers(baseLayers, overlayLayers, {
+            position: 'topright',
+            collapsed: false
+        }).addTo(this.map);
+
+        // Initialize map tooltip
+        this.mapTooltip = document.getElementById('mapTooltip');
+        
+        // Add mousemove event for tooltip
+        this.map.on('mousemove', (e) => {
+            this.mapTooltip.style.left = e.containerPoint.x + 'px';
+            this.mapTooltip.style.top = e.containerPoint.y + 'px';
         });
     }
-    
-    // Export to PDF
-    document.getElementById('exportPdf').addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        // Check if libraries are loaded
-        if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
-            alert('PDF export libraries are still loading. Please try again in a moment.');
-            return;
-        }
-        
-        // Use html2canvas and jsPDF to generate PDF
-        const { jsPDF } = window.jspdf;
-        
-        html2canvas(document.querySelector('.card')).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const imgProps = pdf.getImageProperties(imgData);
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save('fire-monitoring-report.pdf');
-        }).catch(error => {
-            console.error('Error generating PDF:', error);
-            alert('Error generating PDF. Please try again.');
+
+    initializeEventListeners() {
+        document.getElementById('farmSelect').addEventListener('change', (e) => {
+            this.selectFarm(e.target.value);
         });
-    });
-    
-    // Wait for Chart.js to load before initializing chart
-    function initializeChart() {
-        if (typeof Chart === 'undefined') {
-            setTimeout(initializeChart, 100);
+
+        document.getElementById('detectBtn').addEventListener('click', () => {
+            this.detectFires();
+        });
+
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            this.refreshData();
+        });
+
+        // Add animation to buttons on hover
+        const buttons = document.querySelectorAll('.btn');
+        buttons.forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                btn.classList.add('animate__animated', 'animate__pulse');
+            });
+            
+            btn.addEventListener('mouseleave', () => {
+                setTimeout(() => {
+                    btn.classList.remove('animate__animated', 'animate__pulse');
+                }, 300);
+            });
+        });
+    }
+
+    async loadFarms() {
+        try {
+            this.showLoadingIndicator('farmSelect', 'Loading farms...');
+            
+            console.log('Loading farms from database...');
+            const response = await fetch(`http://localhost:3000/api/farmers/${this.currentFarmerId}/farms`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log('Farms loaded:', data);
+            
+            if (data.farms && Array.isArray(data.farms)) {
+                this.farms = data.farms;
+                this.populateFarmSelector();
+                this.showAlert('Farms loaded successfully!', 'success');
+            } else {
+                throw new Error('Invalid response format: farms array not found');
+            }
+            
+        } catch (error) {
+            console.error('Error loading farms from database:', error);
+            this.showAlert(`Failed to load farms: ${error.message}`, 'danger');
+            
+            // Fallback to empty farms array
+            this.farms = [];
+            this.populateFarmSelector();
+        } finally {
+            this.hideLoadingIndicator('farmSelect');
+        }
+    }
+
+    showLoadingIndicator(elementId, text = '') {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        element.disabled = true;
+        element.innerHTML = text ? `<i class="fas fa-spinner fa-spin"></i> ${text}` : '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    hideLoadingIndicator(elementId) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        element.disabled = false;
+        if (elementId === 'farmSelect') {
+            element.innerHTML = '<option value="">Select a farm...</option>';
+            if (this.farms.length > 0) {
+                this.farms.forEach(farm => {
+                    const option = document.createElement('option');
+                    option.value = farm.id;
+                    option.textContent = `${farm.name} (${farm.size.toFixed(2)} ha - ${farm.location})`;
+                    element.appendChild(option);
+                });
+            } else {
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "No farms available";
+                option.disabled = true;
+                element.appendChild(option);
+            }
+        } else {
+            element.innerHTML = element.getAttribute('data-original-text') || '';
+        }
+    }
+
+    populateFarmSelector() {
+        const selector = document.getElementById('farmSelect');
+        selector.innerHTML = '<option value="">Select a farm...</option>';
+        
+        if (this.farms.length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No farms available";
+            option.disabled = true;
+            selector.appendChild(option);
             return;
         }
         
-        // Initialize chart
-        const ctx = document.getElementById('riskChart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [
-                    {% for record in records %}
-                    "{{ record.detection_date.strftime('%d %b') }}"{% if not loop.last %},{% endif %}
-                    {% endfor %}
-                ],
-                datasets: [
-                    {
-                        label: 'High Risk Area',
-                        data: [
-                            {% for record in records %}
-                            {{ record.high_risk_area }}{% if not loop.last %},{% endif %}
-                            {% endfor %}
-                        ],
-                        borderColor: '#ff0000',
-                        backgroundColor: 'rgba(255, 0, 0, 0.1)',
-                        tension: 0.3,
-                        fill: true
-                    },
-                    {
-                        label: 'Medium Risk Area',
-                        data: [
-                            {% for record in records %}
-                            {{ record.medium_risk_area }}{% if not loop.last %},{% endif %}
-                            {% endfor %}
-                        ],
-                        borderColor: '#ffff00',
-                        backgroundColor: 'rgba(255, 255, 0, 0.1)',
-                        tension: 0.3,
-                        fill: true
-                    },
-                    {
-                        label: 'Low Risk Area',
-                        data: [
-                            {% for record in records %}
-                            {{ record.low_risk_area }}{% if not loop.last %},{% endif %}
-                            {% endfor %}
-                        ],
-                        borderColor: '#0000ff',
-                        backgroundColor: 'rgba(0, 0, 255, 0.1)',
-                        tension: 0.3,
-                        fill: true
-                    }
-                ]
+        this.farms.forEach(farm => {
+            const option = document.createElement('option');
+            option.value = farm.id;
+            // Include farm size and location in the display
+            option.textContent = `${farm.name} (${farm.size.toFixed(2)} ha - ${farm.location})`;
+            selector.appendChild(option);
+        });
+    }
+
+    selectFarm(farmId) {
+        if (!farmId) {
+            this.currentFarmId = null;
+            document.getElementById('detectBtn').disabled = true;
+            this.clearMap();
+            this.updateStatusDisplay('No farm selected');
+            return;
+        }
+
+        this.currentFarmId = parseInt(farmId);
+        document.getElementById('detectBtn').disabled = false;
+        
+        const farm = this.farms.find(f => f.id === this.currentFarmId);
+        if (farm) {
+            this.displayFarmBoundary(farm);
+            this.updateStatusDisplay(`Monitoring: ${farm.name}`, 0);
+            console.log('Selected farm:', farm);
+        }
+    }
+
+    displayFarmBoundary(farm) {
+        this.clearMap();
+        
+        // Create GeoJSON layer from farm boundary
+        const geoJsonLayer = L.geoJSON(farm.boundary, {
+            style: {
+                color: '#27ae60',
+                weight: 3,
+                opacity: 0.8,
+                fillOpacity: 0.2,
+                fillColor: '#2ecc71'
             },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            color: '#e8f5e8'
-                        }
+            onEachFeature: (feature, layer) => {
+                // Add popup with farm information
+                layer.bindPopup(`
+                    <div style="min-width: 250px;">
+                        <h4 style="margin-bottom: 0.5rem; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;">
+                            <i class="fas fa-tractor" style="margin-right: 0.5rem;"></i>${farm.name}
+                        </h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
+                            <div><i class="fas fa-ruler-combined" style="width: 20px; color: #7f8c8d;"></i> ${farm.size.toFixed(2)} ha</div>
+                            <div><i class="fas fa-map-marker-alt" style="width: 20px; color: #7f8c8d;"></i> ${farm.location}</div>
+                            <div><i class="fas fa-user" style="width: 20px; color: #7f8c8d;"></i> ${farm.farmer.name}</div>
+                            <div><i class="fas fa-calendar" style="width: 20px; color: #7f8c8d;"></i> ${new Date(farm.createdAt).toLocaleDateString()}</div>
+                        </div>
+                    </div>
+                `);
+
+                // Add boundary highlight effect
+                this.boundaryHighlight = L.geoJSON(farm.boundary, {
+                    style: {
+                        color: '#27ae60',
+                        weight: 5,
+                        opacity: 0.5,
+                        fillOpacity: 0,
+                        className: 'farm-boundary-highlight'
                     }
+                }).addTo(this.map);
+            }
+        }).addTo(this.map);
+
+        this.farmLayers[farm.id] = geoJsonLayer;
+        
+        // Fit map to farm bounds with padding
+        this.map.fitBounds(geoJsonLayer.getBounds(), {
+            padding: [50, 50],
+            animate: true,
+            duration: 1
+        });
+        
+        console.log('Farm boundary displayed for:', farm.name);
+    }
+
+    clearMap() {
+        Object.values(this.farmLayers).forEach(layer => {
+            this.map.removeLayer(layer);
+        });
+        this.farmLayers = {};
+        
+        if (this.heatmapLayer) {
+            this.map.removeLayer(this.heatmapLayer);
+            this.heatmapLayer = null;
+        }
+        
+        if (this.boundaryHighlight) {
+            this.map.removeLayer(this.boundaryHighlight);
+            this.boundaryHighlight = null;
+        }
+    }
+
+    async detectFires() {
+        if (!this.currentFarmId) {
+            this.showAlert('Please select a farm first', 'danger');
+            return;
+        }
+
+        this.showLoading();
+        
+        try {
+            // Simulate progress bar
+            const progressBar = document.querySelector('.progress-bar-fill');
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 5;
+                progressBar.style.width = `${Math.min(progress, 90)}%`;
+                if (progress >= 90) clearInterval(progressInterval);
+            }, 200);
+
+            const response = await fetch('/api/detect-fires', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
                 },
-                scales: {
-                    x: {
-                        grid: {
-                            color: 'rgba(200, 200, 200, 0.1)'
-                        },
-                        ticks: {
-                            color: '#e8f5e8'
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: 'rgba(200, 200, 200, 0.1)'
-                        },
-                        ticks: {
-                            color: '#e8f5e8'
-                        }
-                    }
+                body: JSON.stringify({
+                    farmer_id: this.currentFarmerId,
+                    farm_id: this.currentFarmId
+                })
+            });
+
+            clearInterval(progressInterval);
+            progressBar.style.width = '100%';
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                this.displayFireData(result.data);
+                this.showAlert('Fire detection completed successfully!', 'success');
+                this.loadRecentRecords();
+                
+                // Add success animation
+                const statusCard = document.querySelector('.status-card');
+                statusCard.classList.add('animate__animated', 'animate__tada');
+                setTimeout(() => {
+                    statusCard.classList.remove('animate__animated', 'animate__tada');
+                }, 1000);
+            } else {
+                throw new Error(result.message || 'Fire detection failed');
+            }
+        } catch (error) {
+            console.error('Fire detection error:', error);
+            this.showAlert(`Error: ${error.message}`, 'danger');
+            
+            // Add error animation
+            const detectBtn = document.getElementById('detectBtn');
+            detectBtn.classList.add('animate__animated', 'animate__shakeX');
+            setTimeout(() => {
+                detectBtn.classList.remove('animate__animated', 'animate__shakeX');
+            }, 1000);
+        } finally {
+            this.hideLoading();
+            
+            // Reset progress bar after delay
+            setTimeout(() => {
+                document.querySelector('.progress-bar-fill').style.width = '0%';
+            }, 1000);
+        }
+    }
+
+    displayFireData(data) {
+        // Animate risk indicators
+        this.animateCounter('highRisk', 0, data.high_risk_area || 0, 1000);
+        this.animateCounter('mediumRisk', 0, data.medium_risk_area || 0, 1000);
+        this.animateCounter('lowRisk', 0, data.low_risk_area || 0, 1000);
+        
+        // Update temperature display with animation
+        const tempElement = document.getElementById('avgTemp');
+        this.animateValue(tempElement, 25, Math.round(data.avg_temperature || 25), 1000, '°C');
+
+        // Display heatmap if available
+        if (data.heatmap_image) {
+            this.displayHeatmap(data.heatmap_image);
+        }
+
+        // Update status
+        const riskLevel = (data.high_risk_area || 0) > 1 ? 'HIGH' : 
+                         (data.medium_risk_area || 0) > 2 ? 'MEDIUM' : 'LOW';
+        const fireCount = data.fire_count || 0;
+        this.updateStatusDisplay(`${riskLevel} RISK`, fireCount);
+    }
+
+    animateCounter(elementId, start, end, duration) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            element.textContent = Math.floor(progress * (end - start) + start);
+            if (progress < 1) {
+                window.requestAnimationFrame(step);
+            }
+        };
+        window.requestAnimationFrame(step);
+    }
+
+    animateValue(element, start, end, duration, suffix = '') {
+        let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            element.textContent = Math.floor(progress * (end - start) + start) + suffix;
+            if (progress < 1) {
+                window.requestAnimationFrame(step);
+            }
+        };
+        window.requestAnimationFrame(step);
+    }
+
+    displayHeatmap(heatmapImage) {
+        if (this.heatmapLayer) {
+            this.map.removeLayer(this.heatmapLayer);
+        }
+
+        // Create image overlay for heatmap
+        const farm = this.farms.find(f => f.id === this.currentFarmId);
+        if (farm && farm.boundary) {
+            const bounds = this.calculateBounds(farm.boundary);
+            
+            this.heatmapLayer = L.imageOverlay(
+                `data:image/png;base64,${heatmapImage}`,
+                bounds,
+                {
+                    opacity: 0.7,
+                    className: 'heatmap-overlay'
+                }
+            ).addTo(this.map);
+            
+            // Add heatmap tooltip
+            this.heatmapLayer.on('mousemove', (e) => {
+                this.mapTooltip.textContent = `Fire risk at this location`;
+                this.mapTooltip.style.opacity = '1';
+            });
+            
+            this.heatmapLayer.on('mouseout', () => {
+                this.mapTooltip.style.opacity = '0';
+            });
+        }
+    }
+
+    calculateBounds(boundary) {
+        const coordinates = boundary.coordinates[0];
+        let minLat = Infinity, maxLat = -Infinity;
+        let minLng = Infinity, maxLng = -Infinity;
+
+        coordinates.forEach(coord => {
+            const [lng, lat] = coord;
+            minLat = Math.min(minLat, lat);
+            maxLat = Math.max(maxLat, lat);
+            minLng = Math.min(minLng, lng);
+            maxLng = Math.max(maxLng, lng);
+        });
+
+        return [[minLat, minLng], [maxLat, maxLng]];
+    }
+
+    async loadRecentRecords() {
+        try {
+            const container = document.getElementById('recentRecords');
+            container.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><p>Loading records...</p></div>';
+            
+            const response = await fetch(`/api/fire-records/${this.currentFarmerId}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                this.displayRecentRecords(data.records || []);
+            } else {
+                console.warn('No recent records found');
+                this.displayRecentRecords([]);
+            }
+        } catch (error) {
+            console.error('Error loading records:', error);
+            this.displayRecentRecords([]);
+        }
+    }
+
+    displayRecentRecords(records) {
+        const container = document.getElementById('recentRecords');
+        
+        if (records.length === 0) {
+            container.innerHTML = '<div class="loading"><i class="fas fa-info-circle"></i><p>No records available</p></div>';
+            return;
+        }
+
+        container.innerHTML = records.map((record, index) => `
+            <div class="record-item animate__animated animate__fadeIn" style="animation-delay: ${index * 0.1}s">
+                <div class="record-date">${new Date(record.detection_date).toLocaleString()}</div>
+                <div class="record-stats">
+                    <span>Farm: ${record.farm_name}</span>
+                    <span>Fires: ${record.fire_count || 0}</span>
+                    <span>High Risk: ${record.high_risk_area || 0}ha</span>
+                    <span>Temp: ${Math.round(record.avg_temperature || 0)}°C</span>
+                </div>
+            </div>
+        `).join('');
+        
+        // Add click handlers to record items
+        document.querySelectorAll('.record-item').forEach(item => {
+            item.addEventListener('click', () => {
+                // Add visual feedback
+                item.classList.add('animate__animated', 'animate__pulse');
+                setTimeout(() => {
+                    item.classList.remove('animate__animated', 'animate__pulse');
+                }, 300);
+            });
+        });
+    }
+
+    updateStatusDisplay(status, fireCount = 0) {
+        const statusDisplay = document.getElementById('statusDisplay');
+        const riskClass = fireCount > 0 ? 'alert-danger' : 'status-card';
+        
+        statusDisplay.innerHTML = `
+            <div class="${riskClass} animate__animated animate__fadeIn">
+                <h3>Monitoring Status</h3>
+                <div class="status-value">${status}</div>
+                <small>${fireCount > 0 ? `${fireCount} fire hotspots detected` : 'Real-time monitoring active'}</small>
+                <div class="progress-bar">
+                    <div class="progress-bar-fill"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    showLoading() {
+        const detectBtn = document.getElementById('detectBtn');
+        detectBtn.disabled = true;
+        detectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+    }
+
+    hideLoading() {
+        const detectBtn = document.getElementById('detectBtn');
+        detectBtn.disabled = false;
+        detectBtn.innerHTML = '<i class="fas fa-search"></i> Detect Fire Risk';
+    }
+
+    showAlert(message, type) {
+        // Create alert element
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} animate__animated animate__fadeInUp`;
+        alert.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i> 
+            <span>${message}</span>
+        `;
+        
+        // Insert at top of sidebar
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            sidebar.insertBefore(alert, sidebar.firstChild);
+        }
+        
+        // Auto remove after 5 seconds with fade out
+        setTimeout(() => {
+            alert.classList.add('animate__animated', 'animate__fadeOut');
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 300);
+        }, 5000);
+    }
+
+    async refreshData() {
+        try {
+            // Add refresh animation
+            const refreshBtn = document.getElementById('refreshBtn');
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+            
+            await this.loadFarms();
+            await this.loadRecentRecords();
+            
+            if (this.currentFarmId) {
+                const farm = this.farms.find(f => f.id === this.currentFarmId);
+                if (farm) {
+                    this.displayFarmBoundary(farm);
                 }
             }
-        });
+            
+            this.showAlert('Data refreshed successfully!', 'success');
+            
+            // Add success animation
+            refreshBtn.classList.add('animate__animated', 'animate__rotateIn');
+            setTimeout(() => {
+                refreshBtn.classList.remove('animate__animated', 'animate__rotateIn');
+            }, 500);
+        } catch (error) {
+            console.error('Error refreshing data:', error);
+            this.showAlert('Failed to refresh data', 'danger');
+        } finally {
+            setTimeout(() => {
+                document.getElementById('refreshBtn').innerHTML = '<i class="fas fa-sync"></i> Refresh Data';
+            }, 500);
+        }
     }
+}
+
+// Initialize dashboard when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    const dashboard = new FireMonitoringDashboard();
     
-    // Initialize chart when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeChart);
-    } else {
-        initializeChart();
-    }
-</script>
-{% endblock %}
+    // Add initial animation to header
+    document.querySelector('.header').classList.add('animate__animated', 'animate__fadeInDown');
+    
+    // Add animation to sidebar and map container
+    document.querySelector('.sidebar').classList.add('animate__animated', 'animate__fadeInLeft');
+    document.querySelector('.map-container').classList.add('animate__animated', 'animate__fadeInRight');
+});
+    </script>
+</body>
+</html>
