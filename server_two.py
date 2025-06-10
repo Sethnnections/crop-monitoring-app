@@ -43,6 +43,12 @@ db = SQLAlchemy(app)
 API_BASE_URL = 'http://localhost:3000/api/farmers'
 
 # Database Models
+from datetime import datetime, timezone
+
+def utc_now():
+    """Helper function to get current UTC time"""
+    return datetime.now(timezone.utc)
+
 class CropMonitoringRecord(db.Model):
     __tablename__ = 'crop_monitoring_records'
     
@@ -67,8 +73,8 @@ class CropMonitoringRecord(db.Model):
     ndvi_image = db.Column(db.Text)
     reci_image = db.Column(db.Text)
     ndmi_image = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
     
     __table_args__ = (
         db.Index('idx_farmer_farm_date', 'farmer_id', 'farm_id', 'image_date'),
@@ -87,7 +93,7 @@ class FireMonitoringRecord(db.Model):
     medium_risk_area = db.Column(db.Float)
     low_risk_area = db.Column(db.Float)
     heatmap_image = db.Column(db.Text)  # base64 encoded
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
     
     __table_args__ = (
         db.Index('idx_fire_farmer_farm_date', 'farmer_id', 'farm_id', 'detection_date'),
@@ -105,8 +111,7 @@ class WeatherData(db.Model):
     max_temperature = db.Column(db.Float)
     humidity = db.Column(db.Float)
     wind_speed = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    created_at = db.Column(db.DateTime, default=utc_now)
 
 
 with app.app_context():
@@ -389,7 +394,7 @@ def fetch_and_store_crop_data():
         farm_info = geojson_data['features'][0]['properties']
         
         start_date = data.get('start_date')
-        end_date = data.get('end_date') or datetime.utcnow().date()
+        end_date = data.get('end_date') or datetime.now(timezone.utc).date()
         start_date = start_date or (end_date - timedelta(days=7) if isinstance(end_date, date) else 
                                   datetime.strptime(end_date, '%Y-%m-%d').date() - timedelta(days=7))
         
@@ -611,7 +616,7 @@ def get_crop_index():
         index_type = geojson_data.get('index_type', 'ndvi').lower()
         
         start_date = geojson_data.get('start_date')
-        end_date = geojson_data.get('end_date') or datetime.utcnow().date()
+        end_date = geojson_data.get('end_date') or datetime.now(timezone.utc).date()
         start_date = start_date or (end_date - timedelta(days=30) if isinstance(end_date, date) else 
                                   datetime.strptime(end_date, '%Y-%m-%d').date() - timedelta(days=30))
         
@@ -712,7 +717,7 @@ def get_water_detection():
     try:
         geojson_data = request.json
         start_date = request.args.get('start_date') or geojson_data.get('start_date')
-        end_date = request.args.get('end_date') or geojson_data.get('end_date') or datetime.utcnow().date()
+        end_date = request.args.get('end_date') or geojson_data.get('end_date') or datetime.now(timezone.utc).date()
         start_date = start_date or date(end_date.year, end_date.month, 1) if isinstance(end_date, date) else \
                     datetime.strptime(end_date, '%Y-%m-%d').replace(day=1).date()
         
@@ -861,408 +866,6 @@ def text_report(farmer_id, farm_id):
         )
     except Exception as e:
         logger.exception("Error rendering text report")
-    
-
-# Fire Monitoring Routes and Functions
-@app.route('/fire-monitoring/<int:farmer_id>')
-def fire_monitoring(farmer_id):
-    try:
-        logger.info(f"Fire monitoring page requested for farmer_id={farmer_id}")
-        # Get farmer and farm data
-        logger.debug(f"Requesting farm data from API for farmer_id={farmer_id}")
-        farms = requests.get(f"{API_BASE_URL}/{farmer_id}/farms").json().get('farms', [])
-        if not farms:
-            logger.warning(f"No farms found for farmer_id={farmer_id}")
-            return jsonify({'status': 'error', 'message': 'No farms found'}), 404
-        
-        farm = farms[0]
-        logger.debug(f"Using farm: {farm.get('id', 'unknown')}")
-        geojson = {
-            "type": "FeatureCollection",
-            "features": [{
-                "type": "Feature",
-                "properties": farm,
-                "geometry": farm['boundary']
-            }]
-        }
-        
-        # Get recent fire records
-        logger.debug(f"Querying recent fire records for farmer_id={farmer_id}")
-        records = FireMonitoringRecord.query.filter_by(
-            farmer_id=farmer_id
-        ).order_by(desc(FireMonitoringRecord.detection_date)).limit(5).all()
-        
-        logger.info(f"Rendering fire_monitoring.html for farmer_id={farmer_id}, farm_id={farm.get('id', 'unknown')}")
-        return render_template(
-            'fire_monitoring.html',
-            center=get_geojson_centroid(geojson),
-            geojson=json.dumps(geojson),
-            farmer_id=farmer_id,
-            farm_id=farm['id'],
-            records=records
-        )
-    except Exception as e:
-        logger.error(f"Fire monitoring error: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-
-def generate_fire_heatmap(fire_risk):
-    """Generate color-coded heatmap from fire risk data"""
-    # Create RGB image: red = high risk, yellow = medium, blue = low
-    img = np.zeros((*fire_risk.shape, 3), dtype=np.uint8)
-    
-    # High risk (red)
-    img[fire_risk > 0.7] = [255, 0, 0]
-    
-    # Medium risk (yellow)
-    medium_mask = (fire_risk > 0.4) & (fire_risk <= 0.7)
-    img[medium_mask] = [255, 255, 0]
-    
-    # Low risk (blue)
-    low_mask = (fire_risk > 0.2) & (fire_risk <= 0.4)
-    img[low_mask] = [0, 0, 255]
-    
-    return numpy_to_base64_image(img)
-
-
-
-
-@app.route('/api/detect-fires', methods=['POST'])
-def detect_fires():
-    try:
-        print("🔥 Fire detection endpoint called")
-
-        data = request.json
-        farmer_id = data['farmer_id']
-        farm_id = data['farm_id']
-        print(f"📥 Received data: farmer_id={farmer_id}, farm_id={farm_id}")
-        
-        # Get farm geometry
-        geojson = get_farm_geojson(farmer_id)
-        print("📍 Retrieved farm geojson")
-        geometry = get_geometry_from_geojson(geojson)
-        farm_info = geojson['features'][0]['properties']
-        print(f"🏡 Farm info: {farm_info}")
-        
-        # Date range (last 7 days)
-        end_date = date.today()
-        start_date = end_date - timedelta(days=7)
-        print(f"📆 Monitoring date range: {start_date} to {end_date}")
-        
-        # Configure Sentinel Hub
-        config = SHConfig()
-        config.sh_client_id = app.config['SH_CLIENT_ID']
-        config.sh_client_secret = app.config['SH_CLIENT_SECRET']
-        config.instance_id = app.config['SH_INSTANCE_ID']
-        print("🔐 SentinelHub config set")
-
-        # Common parameters
-        bbox_dims = bbox_to_dimensions(get_geojson_bbox(geojson), resolution=60)
-        time_interval = (start_date.isoformat(), end_date.isoformat())
-
-        # Get NDVI
-        print("🛰️ Requesting NDVI data...")
-        try:
-            ndvi_request = create_sentinelhub_request(
-                get_evalscript_for_index('ndvi'),
-                geometry,
-                time_interval,
-                bbox_dims,
-                config
-            )
-            _, ndvi_data = process_sh_data(ndvi_request.get_data())
-            if ndvi_data is None:
-                raise ValueError("NDVI data is None")
-            print("✅ NDVI data retrieved")
-        except Exception as e:
-            print(f"❌ Failed to retrieve NDVI data: {str(e)}")
-            return jsonify({'status': 'error', 'message': f'Failed to retrieve NDVI data: {str(e)}'}), 400
-
-        # Get NDMI
-        print("🛰️ Requesting NDMI data...")
-        try:
-            ndmi_request = create_sentinelhub_request(
-                get_evalscript_for_index('ndmi'),
-                geometry,
-                time_interval,
-                bbox_dims,
-                config
-            )
-            _, ndmi_data = process_sh_data(ndmi_request.get_data())
-            if ndmi_data is None:
-                raise ValueError("NDMI data is None")
-            print("✅ NDMI data retrieved")
-        except Exception as e:
-            print(f"❌ Failed to retrieve NDMI data: {str(e)}")
-            return jsonify({'status': 'error', 'message': f'Failed to retrieve NDMI data: {str(e)}'}), 400
-
-        # Get Land Surface Temperature (LST) - Using Sentinel-3 SLSTR for better LST
-        print("🛰️ Requesting LST data...")
-        lst_data = None
-        try:
-            # Option 1: Try Sentinel-3 SLSTR for LST
-            lst_evalscript_s3 = """
-            //VERSION=3
-            function setup() {
-                return {
-                    input: ["S8", "dataMask"],
-                    output: { bands: 1, sampleType: "FLOAT32" }
-                };
-            }
-            function evaluatePixel(samples) {
-                if (samples.dataMask === 1 && samples.S8 > 0) {
-                    // Convert brightness temperature to Celsius
-                    let temp_kelvin = samples.S8;
-                    let temp_celsius = temp_kelvin - 273.15;
-                    return [temp_celsius];
-                }
-                return [NaN];
-            }
-            """
-            
-            lst_request_s3 = SentinelHubRequest(
-                evalscript=lst_evalscript_s3,
-                input_data=[SentinelHubRequest.input_data(
-                    data_collection=DataCollection.SENTINEL3_SLSTR,
-                    time_interval=time_interval
-                )],
-                responses=[SentinelHubRequest.output_response('default', MimeType.TIFF)],
-                geometry=geometry,
-                size=bbox_dims,
-                config=config
-            )
-            _, lst_data = process_sh_data(lst_request_s3.get_data())
-            if lst_data is not None:
-                print("✅ LST data retrieved from Sentinel-3")
-            else:
-                raise ValueError("Sentinel-3 LST data is None")
-                
-        except Exception as e:
-            print(f"⚠️ Sentinel-3 LST failed: {str(e)}, trying Landsat...")
-            
-            # Option 2: Fallback to Landsat for LST
-            try:
-                lst_evalscript_landsat = """
-                //VERSION=3
-                function setup() {
-                    return {
-                        input: ["B10", "dataMask"],
-                        output: { bands: 1, sampleType: "FLOAT32" }
-                    };
-                }
-                function evaluatePixel(samples) {
-                    if (samples.dataMask === 1 && samples.B10 > 0) {
-                        // Landsat thermal band conversion
-                        let temp_celsius = samples.B10 * 0.00341802 + 149.0 - 273.15;
-                        return [temp_celsius];
-                    }
-                    return [25.0]; // Default temperature fallback
-                }
-                """
-                
-                lst_request_landsat = SentinelHubRequest(
-                    evalscript=lst_evalscript_landsat,
-                    input_data=[SentinelHubRequest.input_data(
-                        data_collection=DataCollection.LANDSAT_OT_L2,
-                        time_interval=time_interval
-                    )],
-                    responses=[SentinelHubRequest.output_response('default', MimeType.TIFF)],
-                    geometry=geometry,
-                    size=bbox_dims,
-                    config=config
-                )
-                _, lst_data = process_sh_data(lst_request_landsat.get_data())
-                if lst_data is not None:
-                    print("✅ LST data retrieved from Landsat")
-                else:
-                    raise ValueError("Landsat LST data is None")
-                    
-            except Exception as e2:
-                print(f"⚠️ Landsat LST also failed: {str(e2)}, using synthetic temperature...")
-                # Option 3: Generate synthetic temperature data based on NDVI
-                lst_data = generate_synthetic_temperature(ndvi_data)
-                print("✅ Using synthetic LST data")
-
-        # Process data with improved error handling
-        print("📊 Running fire detection algorithm...")
-        try:
-            fire_data = detect_fire_areas(
-                np.array(ndvi_data),
-                np.array(ndmi_data),
-                np.array(lst_data)
-            )
-            print("✅ Fire detection completed")
-        except Exception as e:
-            print(f"🔥 Fire detection algorithm failed: {e}")
-            return jsonify({'status': 'error', 'message': f'Fire detection failed: {str(e)}'}), 400
-
-        # Generate heatmap
-        print("🖼️ Generating fire heatmap...")
-        try:
-            heatmap_img = generate_fire_heatmap(fire_data['heatmap'])
-            print("✅ Heatmap generated")
-        except Exception as e:
-            print(f"🖼️ Heatmap generation failed: {e}")
-            heatmap_img = None
-
-        # Create record
-        print("💾 Storing fire monitoring record in database...")
-        try:
-            record = FireMonitoringRecord(
-                farmer_id=farmer_id,
-                farm_id=farm_id,
-                farm_name=farm_info.get('name', 'Unknown Farm'),
-                detection_date=datetime.utcnow(),
-                fire_count=int(fire_data['fire_count']),
-                high_risk_area=fire_data['high_risk_area'],
-                medium_risk_area=fire_data['medium_risk_area'],
-                low_risk_area=fire_data['low_risk_area'],
-                heatmap_image=heatmap_img
-            )
-            
-            db.session.add(record)
-            db.session.commit()
-            print("✅ Record saved successfully")
-        except Exception as e:
-            print(f"💾 Database save failed: {e}")
-            db.session.rollback()
-            return jsonify({'status': 'error', 'message': f'Database save failed: {str(e)}'}), 500
-
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'record_id': record.id,
-                'detection_date': record.detection_date.isoformat(),
-                'fire_count': record.fire_count,
-                'high_risk_area': round(record.high_risk_area, 2),
-                'medium_risk_area': round(record.medium_risk_area, 2),
-                'low_risk_area': round(record.low_risk_area, 2),
-                'heatmap_image': record.heatmap_image
-            }
-        })
-
-    except Exception as e:
-        logger.error(f"❗ Fire detection error: {e}")
-        print(f"❗ Uncaught error: {e}")
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': f'Unexpected error: {str(e)}'}), 500
-
-
-def generate_synthetic_temperature(ndvi_data):
-    """Generate synthetic temperature data when LST is unavailable"""
-    # Inverse relationship: lower NDVI (stressed vegetation) = higher temperature
-    ndvi_array = np.array(ndvi_data)
-    
-    # Base temperature (25°C) + variation based on vegetation health
-    base_temp = 25.0
-    temp_variation = 15.0  # Max variation of ±15°C
-    
-    # Invert NDVI: healthy vegetation (high NDVI) = cooler, stressed (low NDVI) = hotter
-    synthetic_temp = base_temp + temp_variation * (1 - np.clip(ndvi_array, 0, 1))
-    
-    # Add some random noise for realism
-    noise = np.random.normal(0, 2, synthetic_temp.shape)
-    synthetic_temp += noise
-    
-    # Ensure reasonable temperature range (10-50°C)
-    synthetic_temp = np.clip(synthetic_temp, 10, 50)
-    
-    return synthetic_temp
-
-
-def detect_fire_areas(ndvi, ndmi, lst):
-    """Improved fire detection with better error handling"""
-    # Validate input data
-    if ndvi is None or ndmi is None or lst is None:
-        raise ValueError("Missing required input data (NDVI, NDMI, or LST)")
-    
-    # Convert to numpy arrays and handle different shapes
-    ndvi = np.array(ndvi, dtype=np.float32)
-    ndmi = np.array(ndmi, dtype=np.float32)
-    lst = np.array(lst, dtype=np.float32)
-    
-    print(f"📊 Data shapes - NDVI: {ndvi.shape}, NDMI: {ndmi.shape}, LST: {lst.shape}")
-    
-    # Ensure all arrays have the same shape
-    min_shape = np.minimum.reduce([ndvi.shape, ndmi.shape, lst.shape])
-    ndvi = ndvi[:min_shape[0], :min_shape[1]] if len(ndvi.shape) > 1 else ndvi[:min_shape[0]]
-    ndmi = ndmi[:min_shape[0], :min_shape[1]] if len(ndmi.shape) > 1 else ndmi[:min_shape[0]]
-    lst = lst[:min_shape[0], :min_shape[1]] if len(lst.shape) > 1 else lst[:min_shape[0]]
-    
-    # Handle invalid values
-    ndvi = np.nan_to_num(ndvi, nan=0.5, posinf=1.0, neginf=0.0)
-    ndmi = np.nan_to_num(ndmi, nan=0.5, posinf=1.0, neginf=0.0)
-    lst = np.nan_to_num(lst, nan=25.0, posinf=50.0, neginf=10.0)
-    
-    # Normalize temperature (assuming 10-50°C range)
-    lst_normalized = np.clip((lst - 10) / 40, 0, 1)
-    
-    # Create enhanced fire risk index
-    with np.errstate(invalid='ignore', divide='ignore'):
-        # Fire risk factors:
-        # 1. Low vegetation (1 - NDVI)
-        # 2. Low moisture (1 - NDMI)  
-        # 3. High temperature (normalized LST)
-        vegetation_stress = (1 - np.clip(ndvi, 0, 1))
-        moisture_stress = (1 - np.clip(ndmi, 0, 1))
-        temperature_factor = lst_normalized
-        
-        # Weighted combination
-        fire_risk = (0.4 * vegetation_stress + 
-                    0.4 * moisture_stress + 
-                    0.2 * temperature_factor)
-        
-        # Apply smoothing to reduce noise
-        fire_risk = gaussian_filter(fire_risk, sigma=0.5)
-        
-        # Ensure values are in valid range
-        fire_risk = np.clip(fire_risk, 0, 1)
-    
-    # Define risk thresholds
-    high_risk = fire_risk > 0.7
-    medium_risk = (fire_risk > 0.4) & (fire_risk <= 0.7)
-    low_risk = (fire_risk > 0.2) & (fire_risk <= 0.4)
-    
-    # Calculate areas (60m resolution = 3600 m² = 0.36 ha per pixel)
-    pixel_area = 0.36
-    
-    return {
-        'high_risk_area': float(np.sum(high_risk) * pixel_area),
-        'medium_risk_area': float(np.sum(medium_risk) * pixel_area),
-        'low_risk_area': float(np.sum(low_risk) * pixel_area),
-        'fire_count': int(np.sum(high_risk)),
-        'heatmap': fire_risk,
-        'max_temperature': float(np.max(lst)),
-        'avg_temperature': float(np.mean(lst)),
-        'vegetation_health': float(np.mean(ndvi))
-    }
-
-@app.route('/api/fire-records/<int:farmer_id>')
-def get_fire_records(farmer_id):
-    records = FireMonitoringRecord.query.filter_by(
-        farmer_id=farmer_id
-    ).order_by(desc(FireMonitoringRecord.detection_date)).limit(10).all()
-    
-    return jsonify({
-        'status': 'success',
-        'records': [{
-            'id': r.id,
-            'farm_id': r.farm_id,
-            'farm_name': r.farm_name,
-            'detection_date': r.detection_date.isoformat(),
-            'fire_count': r.fire_count,
-            'high_risk_area': r.high_risk_area,
-            'medium_risk_area': r.medium_risk_area,
-            'low_risk_area': r.low_risk_area,
-            'heatmap_image': r.heatmap_image
-        } for r in records]
-    })
-
-@app.route('/fire-report/<int:record_id>')
-def fire_report(record_id):
-    record = FireMonitoringRecord.query.get_or_404(record_id)
-    return render_template('fire_report.html', record=record)
   
 
 if __name__ == '__main__':

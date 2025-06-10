@@ -1,22 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Farm Fire Risk Monitoring</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+        <!-- Load OpenLayers first -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol/ol.js"></script>
+
     <style>
         :root {
+            --dark-green: #0b2e1a;
             --deep-green: #1a4d2e;
-            --light-green: #4f9d69;
             --accent-green: #3a7d44;
+            --light-green: #4f9d69;
             --background-light: #f5f9f6;
         }
-
+        
         body {
             background: url("{{ url_for('static', filename='img/im.jpg') }}") no-repeat center center fixed;
             background-size: cover;
@@ -29,12 +32,11 @@
             font-family: 'Arial', sans-serif;
             transition: all 0.3s ease;
             background-color: rgb(92, 112, 92);
-
         }
-
+        
         #header {
             transition: all 0.3s ease;
-            background-color: #0b2e1a;
+            background-color: var(--dark-green);
             border-radius: 0px;
             color: white;
             padding: 0px;
@@ -45,49 +47,34 @@
             top: 0;
             z-index: 1000;
             width: 100%;
-
-
         }
-
-        #header:hover {
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        }
-
+        
         #map-container {
             height: 70vh;
             border-radius: 8px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
             margin-bottom: 20px;
             position: relative;
             overflow: hidden;
             transition: all 0.3s ease;
         }
-
-        #map-container:hover {
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
-        }
-
+        
         #map {
             height: 100%;
-            z-index: 1;
+            width: 100%;
         }
-
+        
         .sidebar {
             border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
             height: 100%;
             transition: all 0.3s ease;
             backdrop-filter: blur(5px);
             color: var(--deep-green);
             background-color: rgba(255, 255, 255, 0.8);
         }
-
-        .sidebar:hover {
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
-            transform: translateY(-2px);
-        }
-
+        
         .risk-indicator {
             display: flex;
             align-items: center;
@@ -99,45 +86,54 @@
             transition: all 0.3s ease;
             animation: fadeIn 0.5s ease;
         }
-
+        
+        .risk-critical {
+            background: linear-gradient(135deg, #ff0000, #8b0000);
+            color: white;
+        }
+        
         .risk-high {
-            background-color: #e74c3c;
+            background: linear-gradient(135deg, #ff4500, #ff8c00);
+            color: white;
         }
-
+        
         .risk-medium {
-            background-color: #f39c12;
+            background: linear-gradient(135deg, #ffa500, #ffd700);
+            color: var(--deep-green);
         }
-
+        
         .risk-low {
-            background-color: #f1c40f;
+            background: linear-gradient(135deg, #32cd32, #90ee90);
+            color: var(--deep-green);
         }
-
+        
         .risk-normal {
-            background-color: var(--accent-green);
+            background: linear-gradient(135deg, var(--light-green), var(--accent-green));
+            color: white;
         }
-
+        
         .date-controls {
             background-color: rgba(255, 255, 255, 0.9);
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
             backdrop-filter: blur(5px);
         }
-
+        
         .legend {
             background: rgba(255, 255, 255, 0.9);
             padding: 15px;
             border-radius: 8px;
-            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
             line-height: 1.5;
             font-size: 14px;
             color: #333;
             transition: all 0.3s ease;
             backdrop-filter: blur(5px);
         }
-
+        
         .legend i {
             width: 20px;
             height: 20px;
@@ -147,14 +143,14 @@
             border-radius: 3px;
             transition: all 0.3s ease;
         }
-
+        
         .loading-overlay {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255,255,255,0.9);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -163,20 +159,9 @@
             animation: fadeIn 0.3s ease;
             backdrop-filter: blur(5px);
         }
-
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
-            animation: spin 1s linear infinite;
-        }
-
-        .farm-selector {
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-        }
-
-        .water-stats {
-            background-color: rgba(234, 242, 248, 0.9);
+        
+        .fire-stats {
+            background-color: rgba(248, 215, 218, 0.9);
             padding: 20px;
             border-radius: 8px;
             margin-top: 20px;
@@ -184,152 +169,129 @@
             animation: fadeIn 0.6s ease;
             backdrop-filter: blur(5px);
         }
-
+        
         .stat-value {
             font-size: 28px;
             font-weight: bold;
-            color: #2874a6;
+            color: #dc3545;
             transition: all 0.3s ease;
         }
-
+        
         .progress {
             height: 12px;
             border-radius: 6px;
             transition: all 0.5s ease;
         }
-
-        .progress-bar {
-            transition: width 1s ease;
-        }
-
+        
         .btn {
             transition: all 0.3s ease;
             font-weight: 500;
             border-radius: 8px;
             padding: 10px 20px;
         }
-
+        
         .btn-primary {
             background-color: var(--light-green);
             border-color: var(--accent-green);
         }
-
+        
         .btn-primary:hover {
             background-color: var(--accent-green);
             border-color: var(--deep-green);
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-
+        
         .btn-outline-primary {
             color: var(--light-green);
             border-color: var(--light-green);
         }
-
+        
         .btn-outline-primary:hover {
             background-color: var(--light-green);
             border-color: var(--light-green);
             color: white;
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-
-        .form-control,
-        .form-select {
-            border-radius: 8px;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            transition: all 0.3s ease;
-        }
-
-        .form-control:focus,
-        .form-select:focus {
-            border-color: var(--light-green);
-            box-shadow: 0 0 0 0.25rem rgba(79, 157, 105, 0.25);
-        }
-
-        .header-date-controls {
-            background-color: rgba(255, 255, 255, 0.2);
-            padding: 10px 15px;
-            border-radius: 8px;
-            backdrop-filter: blur(5px);
-            transition: all 0.3s ease;
-        }
-
-        .header-date-controls:hover {
-            background-color: rgba(255, 255, 255, 0.3);
-        }
-
-        .header-date-controls .form-control {
-            background-color: rgba(255, 255, 255, 0.8);
-        }
-
+        
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-
+        
         @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
-
+        
         @keyframes pulse {
-            0% {
-                transform: scale(1);
-            }
-
-            50% {
-                transform: scale(1.05);
-            }
-
-            100% {
-                transform: scale(1);
-            }
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
-
+        
         .pulse {
             animation: pulse 2s infinite;
         }
-
-        .badge {
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-weight: 500;
-            transition: all 0.3s ease;
+        
+        .heatmap-gradient {
+            height: 20px;
+            width: 100%;
+            background: linear-gradient(to right, #00ff00, #ffff00, #ffa500, #ff0000);
+            border-radius: 4px;
+            margin-top: 10px;
         }
-
-        .badge:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        
+        .legend-scale {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 12px;
         }
-
-        h1,
-        h2,
-        h3,
-        h4,
-        h5,
-        h6 {
-            font-weight: 600;
+        
+        .ol-popup {
+            position: absolute;
+            background-color: white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #cccccc;
+            bottom: 12px;
+            left: -50px;
+            min-width: 280px;
         }
-
-        .text-muted {
-            color: #6c757d !important;
+        .ol-popup:after, .ol-popup:before {
+            top: 100%;
+            border: solid transparent;
+            content: " ";
+            height: 0;
+            width: 0;
+            position: absolute;
+            pointer-events: none;
         }
-
-
+        .ol-popup:after {
+            border-top-color: white;
+            border-width: 10px;
+            left: 48px;
+            margin-left: -10px;
+        }
+        .ol-popup:before {
+            border-top-color: #cccccc;
+            border-width: 11px;
+            left: 48px;
+            margin-left: -11px;
+        }
+        .ol-popup-closer {
+            text-decoration: none;
+            position: absolute;
+            top: 2px;
+            right: 8px;
+        }
+        .ol-popup-closer:after {
+            content: "✖";
+        }
+        
         .logo-container {
             display: flex;
             align-items: center;
@@ -337,26 +299,21 @@
             padding: 0.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-
+        
         .logo-container img {
             height: 50px;
             width: auto;
             transition: transform 0.3s ease;
-
         }
-
-        .logo-container:hover img {
-            transform: rotate(5deg);
-        }
-
+        
         .user-info {
             display: flex;
             align-items: center;
             gap: 1rem;
         }
-
+        
         .logout-btn {
-            background-color: var(--deep-green);
+            background-color: var(--dark-green);
             color: white;
             border: none;
             padding: 0.5rem;
@@ -367,7 +324,7 @@
             transition: all 0.3s ease;
             margin: 0.5rem;
         }
-
+        
         .logout-btn:hover {
             background-color: var(--accent-green);
             transform: translateY(-2px);
@@ -375,7 +332,6 @@
         }
     </style>
 </head>
-
 <body>
     <div id="header" class="mb-4">
         <div class="container">
@@ -386,7 +342,7 @@
                     </div>
                     <div>
                         <h3 class="mb-0 fw-bold text-white">
-                            <i class="fas fa-tint me-2"></i>
+                            <i class="fas fa-fire me-2"></i>
                             Farmer: {{ farmer.name }} {{ farmer.surname }}
                         </h3>
                     </div>
@@ -396,13 +352,11 @@
                         <div class="header-date-controls me-2 mb-2 mb-md-0">
                             <div class="row g-2 align-items-end">
                                 <div class="col-auto">
-                                    <label for="startDate" class="form-label mb-0 text-white"><small>Start
-                                            Date</small></label>
+                                    <label for="startDate" class="form-label mb-0 text-white"><small>Start Date</small></label>
                                     <input type="date" class="form-control form-control-sm" id="startDate">
                                 </div>
                                 <div class="col-auto">
-                                    <label for="endDate" class="form-label mb-0 text-white"><small>End
-                                            Date</small></label>
+                                    <label for="endDate" class="form-label mb-0 text-white"><small>End Date</small></label>
                                     <input type="date" class="form-control form-control-sm" id="endDate">
                                 </div>
                                 <div class="col-auto">
@@ -427,12 +381,10 @@
         <div class="row mb-4">
             <div class="col-md-12">
                 <div class="farm-selector">
-                    <label for="farmSelect" class="form-label"><i class="fas fa-map-marker-alt me-2"></i>Select
-                        Farm:</label>
+                    <label for="farmSelect" class="form-label"><i class="fas fa-map-marker-alt me-2"></i>Select Farm:</label>
                     <select id="farmSelect" class="form-select">
                         {% for farm in farms %}
-                        <option value="{{ farm.id }}" data-boundary='{{ farm.boundary | tojson }}' {% if
-                            farm.id==selected_farm.id %}selected{% endif %}>
+                        <option value="{{ farm.id }}" data-boundary='{{ farm.boundary | tojson }}' {% if farm.id == selected_farm.id %}selected{% endif %}>
                             {{ farm.name }} ({{ farm.location }})
                         </option>
                         {% endfor %}
@@ -445,12 +397,16 @@
             <div class="col-md-8">
                 <div id="map-container">
                     <div id="map"></div>
+                    <div id="popup" class="ol-popup">
+                        <a href="#" id="popup-closer" class="ol-popup-closer"></a>
+                        <div id="popup-content"></div>
+                    </div>
                     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
                         <div class="text-center">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
-                            <p class="mt-2">Analyzing Fire risk...</p>
+                            <p class="mt-2">Analyzing fire risk...</p>
                         </div>
                     </div>
                 </div>
@@ -458,7 +414,7 @@
 
             <div class="col-md-4">
                 <div class="sidebar">
-                    <h4><i class="fas fa-fire-extinguisher me-2"></i> Fire Risk Status</h4>
+                    <h4><i class="fas fa-fire me-2"></i> Fire Risk Status</h4>
                     <div id="riskIndicator" class="risk-indicator risk-normal">
                         <i class="fas fa-check-circle fa-2x me-3"></i>
                         <div>
@@ -466,108 +422,170 @@
                             <small id="riskDescription">No significant fire risk detected</small>
                         </div>
                     </div>
-                    <div class="mt-4">
-                        <h5><i class="fas fa-fire me-2"></i> Burned Area</h5>
-                        <div class="fs-3 fw-bold text-danger" id="burnedCoverage">0%</div>
-                        <div class="progress mt-2" style="height:12px; background:#f0f0f0;">
-                            <div id="burnProgress" class="progress-bar" role="progressbar" style="width:0%"></div>
+
+                    <div class="fire-stats">
+                        <h5><i class="fas fa-fire-alt me-2"></i> Burned Area</h5>
+                        <div class="stat-value" id="burnedArea">0%</div>
+                        <div class="progress mt-3" style="height: 12px;">
+                            <div id="burnedProgress" class="progress-bar bg-danger" role="progressbar" style="width: 0%"></div>
                         </div>
-                        <small class="text-muted">Percentage of area burned</small>
+                        <small class="text-muted">Percentage of area affected by fire</small>
                     </div>
+
                     <div class="mt-4">
-                        <h5><i class="fas fa-map-marked-alt me-2"></i> Legend</h5>
+                        <h5><i class="fas fa-map-marked-alt me-2"></i> Fire Heatmap Legend</h5>
                         <div class="legend">
-                            <div class="legend">
-                                <div><i style="background:#B22222;"></i> Very High Risk</div>
-                                <div><i style="background:#DC143C;"></i> High Risk</div>
-                                <div><i style="background:#FF8C00;"></i> Medium Risk</div>
-                                <div><i style="background:#FFA500;"></i> Low Risk</div>
-                                <div><i style="background:var(--accent-fire);"></i> Normal</div>
+                            <div class="heatmap-gradient"></div>
+                            <div class="legend-scale">
+                                <span>Low Risk</span>
+                                <span>High Risk</span>
+                            </div>
+                            <div class="mt-3">
+                                <div><i style="background: #ff0000;"></i> Active Fire</div>
+                                <div><i style="background: #ffa500;"></i> Recent Burn</div>
+                                <div><i style="background: #ffff00;"></i> Moderate Risk</div>
+                                <div><i style="background: #00ff00;"></i> Low Risk</div>
                             </div>
                         </div>
                     </div>
-                    <button id="downloadReportBtn" class="btn w-100 mt-4 btn-outline-danger">
-                        <i class="fas fa-file-pdf me-2"></i> Download Report
-                    </button>
+
+                    <div class="mt-4">
+                        <button id="downloadReportBtn" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-file-pdf me-2"></i> Download Report
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-        <div><i style="background:#DC143C;"></i> High Risk</div>
-        <div><i style="background:#FF8C00;"></i> Medium Risk</div>
-        <div><i style="background:#FFA500;"></i> Low Risk</div>
-        <div><i style="background:var(--accent-fire);"></i> Normal</div>
     </div>
 
-    </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
+    
     <script>
         // Initialize map with the farm boundary
         const initialGeoJSON = {{ geojson | safe }};
         const initialCenter = {{ center | tojson }};
-
+        
         let map;
         let farmLayer;
         let waterOverlay;
         let farmBoundaryLayer;
 
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             initMap();
             setupEventListeners();
             loadInitialData();
-
+            
             // Set default dates (last 30 days)
             const endDate = new Date();
-            const startDate = new Date();
-            startDate.setDate(endDate.getDate() - 30);
-
+            const startDate = new Date();        
             document.getElementById('startDate').valueAsDate = startDate;
             document.getElementById('endDate').valueAsDate = endDate;
         });
-
         function initMap() {
-            map = L.map('map').setView(initialCenter, 13);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
-
+        // this now sees `ol` correctly
+        map = new ol.Map({
+       
+                   target: 'map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM()
+                    })
+                ],
+                view: new ol.View({
+                    center: ol.proj.fromLonLat(initialCenter),
+                    zoom: 13
+                })
+            });
+            
             // Add farm boundary
-            farmBoundaryLayer = L.geoJSON(initialGeoJSON, {
-                style: {
-                    color: '#FF5722',
-                    weight: 3,
-                    opacity: 1,
-                    fillOpacity: 0.1
-                }
-            }).addTo(map);
-
+            farmBoundary = new ol.format.GeoJSON().readFeature(initialGeoJSON.features[0].geometry);
+            vectorLayer = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: [farmBoundary]
+                }),
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#FF5722',
+                        width: 3
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 87, 34, 0.1)'
+                    })
+                })
+            });
+            map.addLayer(vectorLayer);
+            
             // Fit map to boundary
-            map.fitBounds(farmBoundaryLayer.getBounds());
+            map.getView().fit(vectorLayer.getSource().getExtent(), {
+                padding: [50, 50, 50, 50]
+            });
+            
+            // Initialize popup
+            popup = new ol.Overlay({
+                element: document.getElementById('popup'),
+                positioning: 'bottom-center',
+                stopEvent: false,
+                offset: [0, -40]
+            });
+            map.addOverlay(popup);
+            
+            // Add click event for popup
+            map.on('click', function(evt) {
+                const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+                    return feature;
+                });
+                
+                if (feature) {
+                    const coordinates = evt.coordinate;
+                    popup.setPosition(coordinates);
+                    
+                    let content = '<b>Fire Risk Information</b><br>';
+                    if (feature.get('riskLevel')) {
+                        content += `Risk Level: ${feature.get('riskLevel')}<br>`;
+                    }
+                    if (feature.get('temp')) {
+                        content += `Temperature: ${feature.get('temp')}°C<br>`;
+                    }
+                    if (feature.get('date')) {
+                        content += `Date: ${feature.get('date')}`;
+                    }
+                    
+                    document.getElementById('popup-content').innerHTML = content;
+                } else {
+                    popup.setPosition(undefined);
+                }
+            });
+            
+            // Close popup
+            document.getElementById('popup-closer').onclick = function() {
+                popup.setPosition(undefined);
+                return false;
+            };
         }
 
         function setupEventListeners() {
-            document.getElementById('updateBtn').addEventListener('click', updateFloodAnalysis);
+            document.getElementById('updateBtn').addEventListener('click', updateFireAnalysis);
             document.getElementById('farmSelect').addEventListener('change', handleFarmChange);
             document.getElementById('downloadReportBtn').addEventListener('click', downloadReport);
+            document.querySelector('.logout-btn').addEventListener('click', goBack);
         }
 
         function loadInitialData() {
-            updateFloodAnalysis();
+            updateFireAnalysis();
         }
 
         async function handleFarmChange() {
             const selectedOption = document.getElementById('farmSelect').selectedOptions[0];
             const boundaryData = JSON.parse(selectedOption.dataset.boundary);
-
+            
             showLoading(true);
-
+            
             try {
                 // Create GeoJSON feature from boundary data
                 const newGeoJSON = {
@@ -578,55 +596,44 @@
                         geometry: boundaryData
                     }]
                 };
-
+                
                 // Update map with new boundary
-                map.removeLayer(farmBoundaryLayer);
-                farmBoundaryLayer = L.geoJSON(newGeoJSON, {
-                    style: {
-                        color: '#FF5722',
-                        weight: 3,
-                        opacity: 1,
-                        fillOpacity: 0.1
-                    }
-                }).addTo(map);
-
-                map.fitBounds(farmBoundaryLayer.getBounds());
-
-                // Update flood analysis for new farm
-                await updateFloodAnalysis();
-
+                vectorLayer.getSource().clear();
+                farmBoundary = new ol.format.GeoJSON().readFeature(newGeoJSON.features[0].geometry);
+                vectorLayer.getSource().addFeature(farmBoundary);
+                
+                // Fit map to boundary
+                map.getView().fit(vectorLayer.getSource().getExtent(), {
+                    padding: [50, 50, 50, 50]
+                });
+                
+                // Update fire analysis for new farm
+                await updateFireAnalysis();
+                
                 Swal.fire({
                     icon: 'success',
                     title: 'Farm Changed',
                     text: `Now viewing ${selectedOption.text}`,
                     showConfirmButton: false,
-                    timer: 1500,
-                    background: 'var(--background-light)',
-                    backdrop: `
-                        rgba(0,0,0,0.4)
-                        url("{{ url_for('static', filename='img/im.jpg') }}")
-                        center top
-                        no-repeat
-                    `
+                    timer: 1500
                 });
             } catch (error) {
                 console.error('Error changing farm:', error);
                 Swal.fire({
                     icon: 'error',
                     title: 'Error',
-                    text: 'Failed to load farm data. Please try again.',
-                    confirmButtonColor: 'var(--accent-green)'
+                    text: 'Failed to load farm data. Please try again.'
                 });
                 showLoading(false);
             }
         }
 
-        async function updateFloodAnalysis() {
+        async function updateFireAnalysis() {
             showLoading(true);
-
+            
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
-
+            
             try {
                 // Get current farm boundary as GeoJSON
                 const farmGeoJSON = {
@@ -634,10 +641,10 @@
                     features: [{
                         type: "Feature",
                         properties: {},
-                        geometry: farmBoundaryLayer.toGeoJSON().features[0].geometry
+                        geometry: farmBoundary.getGeometry()
                     }]
                 };
-
+                
                 // Send request to backend
                 const response = await fetch('/get-fire-detection', {
                     method: 'POST',
@@ -650,23 +657,22 @@
                         end_date: endDate
                     })
                 });
-
-                if (!response.ok) throw new Error('Failed to get flood analysis');
-
+                
+                if (!response.ok) throw new Error('Failed to get fire analysis');
+                
                 const data = await response.json();
-
-                console.log('Flood analysis data:', data);
-
+                console.log('Fire analysis data:', data);
+                
                 if (data.status !== 'success') {
-                    throw new Error(data.message || 'Failed to process flood data');
+                    throw new Error(data.message || 'Failed to process fire data');
                 }
-
-                // Update water overlay on map
-                updateWaterOverlay(data.image);
-
-                // Update risk indicators
-                updateRiskIndicators(data.water_coverage, data.risk_level);
-
+                
+                // Update fire risk indicators
+                updateRiskIndicators(data.burned_area, data.risk_level);
+                
+                // Add heatmap layer
+                addHeatmapLayer(data.heatmap_data);
+                
                 // Show success notification
                 Swal.fire({
                     position: 'top-end',
@@ -674,158 +680,151 @@
                     title: 'Analysis Updated',
                     showConfirmButton: false,
                     timer: 1500,
-                    toast: true,
-                    background: 'var(--background-light)'
+                    toast: true
                 });
-
+                
             } catch (error) {
-                console.error('Error updating flood analysis:', error);
+                console.error('Error updating fire analysis:', error);
                 Swal.fire({
                     icon: 'error',
                     title: 'Error',
-                    text: 'Failed to update flood analysis. Please try again.',
-                    confirmButtonColor: 'var(--accent-green)'
+                    text: 'Failed to update fire analysis. Please try again.'
                 });
             } finally {
                 showLoading(false);
             }
         }
 
-        function updateWaterOverlay(imageData) {
-            // Remove existing overlay if it exists
-            if (waterOverlay) {
-                map.removeLayer(waterOverlay);
+        function addHeatmapLayer(heatmapData) {
+            // Remove existing heatmap layer if exists
+            if (heatmapLayer) {
+                map.removeLayer(heatmapLayer);
             }
-
-            // Convert image data to URL
-            const imageUrl = convertImageDataToUrl(imageData);
-
-            // Get bounds of the farm
-            const bounds = farmBoundaryLayer.getBounds();
-
-            // Add new overlay
-            waterOverlay = L.imageOverlay(imageUrl, bounds, {
-                opacity: 0.7
-            }).addTo(map);
-
-            // Add animation to the overlay
-            waterOverlay.getElement().style.animation = 'fadeIn 1s ease';
+            
+            // Create heatmap features
+            const features = [];
+            for (const point of heatmapData) {
+                const feature = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat([point.lon, point.lat])),
+                    intensity: point.intensity,
+                    temp: point.temp,
+                    date: point.date,
+                    riskLevel: point.riskLevel
+                });
+                features.push(feature);
+            }
+            
+            // Create heatmap layer
+            heatmapLayer = new ol.layer.Heatmap({
+                source: new ol.source.Vector({
+                    features: features
+                }),
+                blur: 25,
+                radius: 25,
+                gradient: [
+                    '#00ff00', // Low risk
+                    '#ffff00', // Moderate risk
+                    '#ffa500', // High risk
+                    '#ff0000'  // Critical risk
+                ]
+            });
+            
+            map.addLayer(heatmapLayer);
         }
 
-        function convertImageDataToUrl(imageData) {
-            // Convert the array to a canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = imageData[0].length;
-            canvas.height = imageData.length;
-
-            const ctx = canvas.getContext('2d');
-            const imageDataObj = ctx.createImageData(canvas.width, canvas.height);
-
-            // Flatten the 3D array into a 1D array
-            const flatArray = [];
-            for (let y = 0; y < imageData.length; y++) {
-                for (let x = 0; x < imageData[y].length; x++) {
-                    const pixel = imageData[y][x];
-                    // Assuming imageData is in format [R, G, B, A] with values 0-1
-                    flatArray.push(
-                        Math.round(pixel[0] * 255),
-                        Math.round(pixel[1] * 255),
-                        Math.round(pixel[2] * 255),
-                        Math.round(pixel[3] * 255)
-                    );
-                }
-            }
-
-            imageDataObj.data.set(new Uint8ClampedArray(flatArray));
-            ctx.putImageData(imageDataObj, 0, 0);
-
-            return canvas.toDataURL();
-        }
-
-        function updateRiskIndicators(coverage, riskLevel) {
-            // Update water coverage display with animation
-            const waterCoverageElement = document.getElementById('waterCoverage');
-            const waterProgressElement = document.getElementById('waterProgress');
-
+        function updateRiskIndicators(burnedArea, riskLevel) {
+            // Update burned area display with animation
+            const burnedAreaElement = document.getElementById('burnedArea');
+            const burnedProgressElement = document.getElementById('burnedProgress');
+            
             // Animate the percentage change
-            animateValue(waterCoverageElement, 0, coverage, 1000);
-
+            animateValue(burnedAreaElement, 0, burnedArea, 1000);
+            
             // Animate the progress bar
             setTimeout(() => {
-                waterProgressElement.style.width = `${coverage}%`;
+                burnedProgressElement.style.width = `${burnedArea}%`;
             }, 100);
-
+            
             // Update risk indicator
             const riskElement = document.getElementById('riskIndicator');
             const riskLevelElement = document.getElementById('riskLevel');
             const riskDescriptionElement = document.getElementById('riskDescription');
-
+            
             // Remove all risk classes
             riskElement.className = 'risk-indicator';
-
-            console.log('Risk Level:', riskLevel);
-            console.log('Coverage:', coverage);
-
+            
             // Determine risk level based on coverage if not provided
             let actualRiskLevel = (typeof riskLevel === 'string') ? riskLevel.toLowerCase() : riskLevel;
-            console.log('Actual Risk Level:', actualRiskLevel);
             if (!actualRiskLevel) {
-                if (coverage > 30) {
+                if (burnedArea > 20) {
+                    actualRiskLevel = 'critical';
+                } else if (burnedArea > 10) {
                     actualRiskLevel = 'high';
-                } else if (coverage > 15) {
+                } else if (burnedArea > 5) {
                     actualRiskLevel = 'medium';
-                } else if (coverage > 5) {
+                } else if (burnedArea > 1) {
                     actualRiskLevel = 'low';
                 } else {
                     actualRiskLevel = 'normal';
                 }
             }
-
+            
             // Add appropriate risk class and update content
             let iconClass = 'fa-check-circle';
             let description = '';
-
+            let title = '';
+            
             switch (actualRiskLevel) {
+                case 'critical':
+                    riskElement.classList.add('risk-critical');
+                    iconClass = 'fa-fire';
+                    title = 'CRITICAL';
+                    description = 'Extreme fire risk - Immediate action required';
+                    riskElement.classList.add('pulse');
+                    break;
                 case 'high':
                     riskElement.classList.add('risk-high');
                     iconClass = 'fa-exclamation-triangle';
-                    description = 'High fire risk - Immediate action required';
-                    // Pulse animation for high risk
+                    title = 'HIGH';
+                    description = 'High fire risk - Take precautions immediately';
                     riskElement.classList.add('pulse');
                     break;
                 case 'medium':
                     riskElement.classList.add('risk-medium');
                     iconClass = 'fa-exclamation-circle';
+                    title = 'MEDIUM';
                     description = 'Moderate fire risk - Monitor closely';
                     riskElement.classList.remove('pulse');
                     break;
                 case 'low':
                     riskElement.classList.add('risk-low');
                     iconClass = 'fa-info-circle';
+                    title = 'LOW';
                     description = 'Low fire risk - No immediate action needed';
                     riskElement.classList.remove('pulse');
                     break;
                 default:
                     riskElement.classList.add('risk-normal');
+                    iconClass = 'fa-check-circle';
+                    title = 'NORMAL';
                     description = 'No significant fire risk detected';
                     riskElement.classList.remove('pulse');
             }
-
-            riskLevelElement.textContent = actualRiskLevel;
+            
+            riskLevelElement.textContent = title;
             riskDescriptionElement.textContent = description;
-
+            
             // Update icon with animation
             const icon = riskElement.querySelector('i');
             icon.className = `fas ${iconClass} fa-2x me-3`;
-
+            
             // Show appropriate alert for high risk
-            if (actualRiskLevel === 'high') {
+            if (actualRiskLevel === 'critical' || actualRiskLevel === 'high') {
                 Swal.fire({
                     icon: 'warning',
-                    title: 'High Fire Risk Detected!',
-                    text: 'Your farm has significant burned area that may indicate fire hazard.',
-                    confirmButtonColor: 'var(--accent-green)',
-                    background: 'var(--background-light)'
+                    title: `${title} Fire Risk Detected!`,
+                    text: description,
+                    confirmButtonColor: 'var(--accent-green)'
                 });
             }
         }
@@ -859,7 +858,7 @@
 
         async function downloadReport() {
             showLoading(true);
-
+            
             try {
                 // Show preparing report notification
                 Swal.fire({
@@ -868,10 +867,9 @@
                     timerProgressBar: true,
                     didOpen: () => {
                         Swal.showLoading();
-                    },
-                    background: 'var(--background-light)'
+                    }
                 });
-
+                
                 // Capture map as image
                 const mapElement = document.getElementById('map-container');
                 const canvas = await html2canvas(mapElement, {
@@ -881,69 +879,67 @@
                     logging: false,
                     backgroundColor: null
                 });
-
+                
                 // Create PDF
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF('landscape');
-
+                
                 // Add title and date
                 pdf.setFontSize(18);
                 pdf.setTextColor(26, 77, 46); // Deep green
-                pdf.text('Farm Flood Risk Report', 20, 20);
+                pdf.text('Farm Fire Risk Report', 20, 20);
                 pdf.setFontSize(12);
                 pdf.setTextColor(0, 0, 0); // Black
                 pdf.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, 30);
-
+                
                 // Add farm info
                 const selectedFarm = document.getElementById('farmSelect').selectedOptions[0].text;
                 pdf.text(`Farm: ${selectedFarm}`, 20, 40);
-
+                
                 // Add risk status
                 const riskStatus = document.getElementById('riskLevel').textContent;
                 pdf.text(`Current Risk Status: ${riskStatus}`, 20, 50);
-
-                // Add water coverage
-                const waterCoverage = document.getElementById('waterCoverage').textContent;
-                pdf.text(`Water Coverage: ${waterCoverage}`, 20, 60);
-
+                
+                // Add burned area
+                const burnedArea = document.getElementById('burnedArea').textContent;
+                pdf.text(`Burned Area: ${burnedArea}`, 20, 60);
+                
                 // Add map image
                 const imgData = canvas.toDataURL('image/png');
                 pdf.addImage(imgData, 'PNG', 20, 70, 250, 150);
-
+                
                 // Add legend
                 pdf.setFontSize(10);
                 pdf.text('Legend:', 20, 230);
-                pdf.text('■ Water (high confidence)', 40, 240);
-                pdf.text('■ Water (medium confidence)', 40, 250);
-                pdf.text('■ Water (low confidence)', 40, 260);
-                pdf.text('■ Land', 40, 270);
-
+                pdf.text('■ Critical Fire Risk', 40, 240);
+                pdf.text('■ High Fire Risk', 40, 250);
+                pdf.text('■ Medium Fire Risk', 40, 260);
+                pdf.text('■ Low Fire Risk', 40, 270);
+                
                 // Save PDF
-                pdf.save('Flood_Risk_Report.pdf');
-
+                pdf.save('Fire_Risk_Report.pdf');
+                
                 // Show success notification
                 Swal.fire({
                     icon: 'success',
                     title: 'Report Downloaded',
-                    text: 'Your flood risk report has been downloaded successfully.',
-                    confirmButtonColor: 'var(--accent-green)',
-                    background: 'var(--background-light)'
+                    text: 'Your fire risk report has been downloaded successfully.',
+                    confirmButtonColor: 'var(--accent-green)'
                 });
-
+                
             } catch (error) {
                 console.error('Error generating report:', error);
                 Swal.fire({
                     icon: 'error',
                     title: 'Error',
-                    text: 'Failed to generate report. Please try again.',
-                    confirmButtonColor: 'var(--accent-green)'
+                    text: 'Failed to generate report. Please try again.'
                 });
             } finally {
                 showLoading(false);
             }
         }
-        // Logout button functionality
-        document.querySelector('.logout-btn').addEventListener('click', function () {
+
+        function goBack() {
             Swal.fire({
                 title: 'Are you sure you want to go back?',
                 icon: 'warning',
@@ -956,10 +952,98 @@
                     window.history.back();
                 }
             });
-        });
+        }
 
+        // Generate mock heatmap data (in a real app, this would come from the server)
+        function generateMockHeatmapData() {
+            const data = [];
+            const extent = vectorLayer.getSource().getExtent();
+            const minLon = ol.proj.toLonLat([extent[0], extent[1]])[0];
+            const minLat = ol.proj.toLonLat([extent[0], extent[1]])[1];
+            const maxLon = ol.proj.toLonLat([extent[2], extent[3]])[0];
+            const maxLat = ol.proj.toLonLat([extent[2], extent[3]])[1];
+            
+            // Generate random points within the farm boundary
+            for (let i = 0; i < 50; i++) {
+                const lon = minLon + Math.random() * (maxLon - minLon);
+                const lat = minLat + Math.random() * (maxLat - minLat);
+                const intensity = Math.random();
+                const temp = 25 + Math.random() * 15; // 25-40°C
+                
+                let riskLevel = 'Low';
+                if (intensity > 0.75) riskLevel = 'Critical';
+                else if (intensity > 0.5) riskLevel = 'High';
+                else if (intensity > 0.25) riskLevel = 'Medium';
+                
+                data.push({
+                    lon: lon,
+                    lat: lat,
+                    intensity: intensity,
+                    temp: temp.toFixed(1),
+                    date: new Date().toLocaleDateString(),
+                    riskLevel: riskLevel
+                });
+            }
+            
+            return data;
+        }
+        
+        // Simulate fire analysis with mock data
+        function simulateFireAnalysis() {
+            const burnedArea = Math.floor(Math.random() * 30); // 0-30%
+            let riskLevel = 'Normal';
+            
+            if (burnedArea > 20) riskLevel = 'Critical';
+            else if (burnedArea > 10) riskLevel = 'High';
+            else if (burnedArea > 5) riskLevel = 'Medium';
+            else if (burnedArea > 1) riskLevel = 'Low';
+            
+            return {
+                burned_area: burnedArea,
+                risk_level: riskLevel,
+                heatmap_data: generateMockHeatmapData()
+            };
+        }
+        
+        // For demo purposes, use mock data
+        window.updateFireAnalysis = async function() {
+            showLoading(true);
+            
+            try {
+                // Simulate API delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                // Get mock data
+                const data = simulateFireAnalysis();
+                
+                // Update fire risk indicators
+                updateRiskIndicators(data.burned_area, data.risk_level);
+                
+                // Add heatmap layer
+                addHeatmapLayer(data.heatmap_data);
+                
+                // Show success notification
+                Swal.fire({
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'Analysis Updated',
+                    showConfirmButton: false,
+                    timer: 1500,
+                    toast: true
+                });
+                
+            } catch (error) {
+                console.error('Error updating fire analysis:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to update fire analysis. Please try again.'
+                });
+            } finally {
+                showLoading(false);
+            }
+        }
 
     </script>
 </body>
-
 </html>

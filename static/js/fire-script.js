@@ -1,0 +1,3 @@
+
+        // Initialize map with OpenLayers
+       
