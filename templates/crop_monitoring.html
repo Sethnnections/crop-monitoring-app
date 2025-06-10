@@ -921,21 +921,10 @@
             
             document.getElementById('health-status').textContent = healthStatus;
         }
-
-    function generateReport() {
-        // This is a GET request to fetch the report
-        fetch(`/report/${farmerId}/${farmId}?include_images=true`, {
-            method: 'GET'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if(data.status === 'success') {
-                populateReport(data);
-                document.getElementById('crop-report').style.display = 'block';
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    }
+        function generateReport() {
+            // Redirect to the text report page using farmerId and farmId
+            window.open(`http://127.0.0.1:5000/text-report/${farmerId}/${farmId}`, '_blank');
+        }
 
     function populateReport(data) {
         // Basic info
