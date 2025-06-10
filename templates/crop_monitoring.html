@@ -39,6 +39,12 @@
         .main-content {
             flex: 1;
             position: relative;
+            max-width: calc(100% - 380px);
+            overflow: hidden;
+            background-color: var(--background-light);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
         }
 
         #map {
@@ -742,32 +748,49 @@
         function fetchCropData() {
             // Show loader
             document.getElementById('loader').style.display = 'block';
-            
+
             // Get date range
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
-            
+
             // Update date status
             if (startDate && endDate) {
-                const start = new Date(startDate);
-                const end = new Date(endDate);
-                const dayDiff = Math.round((end - start) / (1000 * 60 * 60 * 24));
-                document.getElementById('date-status').textContent = `Showing data for ${dayDiff} days (${startDate} to ${endDate})`;
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const dayDiff = Math.round((end - start) / (1000 * 60 * 60 * 24));
+            document.getElementById('date-status').textContent = `Showing data for ${dayDiff} days (${startDate} to ${endDate})`;
             }
-            
-            // Prepare request data
+
+            // Before main request, call fetch-and-store-crop-data
+            fetch('http://127.0.0.1:5000/fetch-and-store-crop-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                farmer_id: farmerId,
+                farm_id: farmId,
+                start_date: startDate,
+                end_date: endDate,
+                crop_name: "MRV Crops",
+                sowing_date: startDate
+            })
+            })
+            .then(response => response.json())
+            .then(storeData => {
+            // Optionally handle storeData, e.g., show a message or log
+            // Now proceed with the main crop index request
             const requestData = {
                 ...currentGeojson,
                 start_date: startDate,
                 end_date: endDate,
                 index_type: currentIndex
             };
-            
-            // Make API request
+
             fetch('/get-crop-index', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(requestData)
             })
@@ -775,16 +798,16 @@
             .then(data => {
                 // Hide loader
                 document.getElementById('loader').style.display = 'none';
-                
+
                 if (data.status === 'success') {
-                    // Display the index layer on the map
-                    displayIndexLayer(data);
-                    
-                    // Update status indicators
-                    updateStatusIndicators(data);
+                // Display the index layer on the map
+                displayIndexLayer(data);
+
+                // Update status indicators
+                updateStatusIndicators(data);
                 } else {
-                    // Show error message
-                    alert(`Error: ${data.message}`);
+                // Show error message
+                alert(`Error: ${data.message}`);
                 }
             })
             .catch(error => {
@@ -792,6 +815,12 @@
                 document.getElementById('loader').style.display = 'none';
                 console.error('Error fetching crop data:', error);
                 alert('Failed to fetch crop data. Please try again later.');
+            });
+            })
+            .catch(error => {
+            document.getElementById('loader').style.display = 'none';
+            console.error('Error storing crop data:', error);
+            alert('Failed to store crop data. Please try again later.');
             });
         }
         
